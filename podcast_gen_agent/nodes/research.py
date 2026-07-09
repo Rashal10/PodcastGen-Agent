@@ -11,7 +11,6 @@ def research_node(state: PodcastState) -> dict:
         with DDGS() as ddgs:
             results = list(ddgs.text(topic, max_results=5))
         
-        # compile research into a summary
         research_text = f"Topic: {topic}\n\nKey Information:\n"
         for i, r in enumerate(results, 1):
             research_text += f"\n{i}. {r['title']}\n{r['body']}\n"
@@ -21,5 +20,4 @@ def research_node(state: PodcastState) -> dict:
         
     except Exception as e:
         print(f"[Research] Search failed: {e}")
-        # fallback to just the topic
         return {"research_data": f"Topic: {topic}\nNo additional research available."}

@@ -32,7 +32,7 @@ def _load_model():
 def _parse_script(raw_text: str) -> list[DialogueLine]:
     """Extract dialogue lines from LLM output."""
     lines = []
-    pattern = r"\[(host|guest)\]:\s*(.+?)(?=\[(?:host|guest)\]:|$)"
+    pattern = r"[*\s\[]*(host|guest)[*\s\]]*:?[*\s]*(.+?)(?=(?:[*\s\[]*(?:host|guest)[*\s\]]*:?|$))"
     
     matches = re.findall(pattern, raw_text, re.IGNORECASE | re.DOTALL)
     for speaker, text in matches:
@@ -51,7 +51,6 @@ def script_generator_node(state: PodcastState) -> dict:
     research = state["research_data"]
     topic = state["topic"]
     
-    # rough estimate: 150 words per minute, ~10 words per line
     target_lines = (duration * 150) // 10
     
     prompt = f"""Write a podcast script for a {duration}-minute episode about: {topic}
@@ -89,14 +88,12 @@ Write the full script:"""
             pad_token_id=tokenizer.eos_token_id,
         )
     
-    response = tokenizer.decode(outputs[0], skip_special_tokens=True)
-    # generated part
-    response = response.split("Write the full script:")[-1].strip()
+    generated_tokens = outputs[0][inputs.input_ids.shape[1]:]
+    response = tokenizer.decode(generated_tokens, skip_special_tokens=True).strip()
     
     script = _parse_script(response)
     
     if not script:
-        # fallback if parsing failed
         script = [
             DialogueLine("host", f"Welcome to our podcast about {topic}."),
             DialogueLine("guest", f"Thanks for having me. {topic} is a fascinating subject."),
@@ -105,7 +102,6 @@ Write the full script:"""
     
     print(f"[Script] Generated {len(script)} dialogue lines")
     
-    # clearing gpu memory cache
     torch.cuda.empty_cache()
     
     return {"script": script, "current_line_idx": 0}

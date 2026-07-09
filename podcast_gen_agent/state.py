@@ -15,20 +15,15 @@ class PodcastState(TypedDict):
     topic: str
     duration_mins: int
     
-    # research phase
     research_data: str
     
-    # script phase
     script: List[DialogueLine]
     current_line_idx: int
     
-    # audio phase
-    audio_segments: List[str]  # paths to wav files
+    audio_segments: List[str]
     intro_music_path: str
     outro_music_path: str
     
-    # final output
     final_audio_path: str
     
-    # status tracking
     error: Optional[str]

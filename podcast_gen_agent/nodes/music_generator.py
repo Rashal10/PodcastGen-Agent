@@ -25,7 +25,6 @@ def music_generator_node(state: PodcastState) -> dict:
     model = _load_model()
     topic = state["topic"]
     
-    # intro
     print("[Music] Generating intro...")
     intro_prompt = f"upbeat podcast intro music, professional, {topic} theme"
     intro_wav = model.generate([intro_prompt])
@@ -33,7 +32,6 @@ def music_generator_node(state: PodcastState) -> dict:
     intro_path = OUTPUT_DIR / "intro_music.wav"
     torchaudio.save(str(intro_path), intro_wav[0].cpu(), sample_rate=32000)
     
-    # outro
     print("[Music] Generating outro...")
     outro_prompt = "calm podcast outro music, fade out, professional"
     outro_wav = model.generate([outro_prompt])
