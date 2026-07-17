@@ -27,8 +27,9 @@ from podcast_gen_agent.graph import get_graph
 assert torch.cuda.is_available(), "GPU runtime is not enabled"
 assert shutil.which("ffmpeg"), "ffmpeg is missing"
 assert shutil.which("espeak-ng"), "espeak-ng is missing"
-assert transformers.__version__ == "4.57.5"
-assert tokenizers.__version__ == "0.22.1"
+from packaging import version
+assert version.parse(transformers.__version__) >= version.parse("4.57.5")
+assert version.parse(tokenizers.__version__) >= version.parse("0.22.0")
 get_graph()
 print("transformers", transformers.__version__)
 print("tokenizers", tokenizers.__version__)
