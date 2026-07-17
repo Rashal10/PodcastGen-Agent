@@ -43,7 +43,9 @@ def test_compute_max_new_tokens_scales_with_duration():
 
 
 def test_compute_target_lines():
-    assert compute_target_lines(5) == 75
+    assert compute_target_lines(1) == 6
+    assert compute_target_lines(2) == 10
+    assert compute_target_lines(5) == 15
 
 
 def test_compute_recursion_limit_covers_voice_loop():

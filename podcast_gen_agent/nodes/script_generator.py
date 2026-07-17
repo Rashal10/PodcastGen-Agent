@@ -29,7 +29,8 @@ def compute_max_new_tokens(duration_mins: int) -> int:
 
 def compute_target_lines(duration_mins: int) -> int:
     """Estimate dialogue line count from target episode duration."""
-    return max(duration_mins * 15, 10)
+    estimated = max(duration_mins * 5, 6)
+    return min(estimated, settings.max_script_lines)
 
 
 def compute_recursion_limit(duration_mins: int) -> int:

@@ -62,7 +62,8 @@ class Settings:
         self.llm_top_p = _env_float("PODCAST_LLM_TOP_P", 0.9)
         self.tts_chunk_max_chars = _env_int("PODCAST_TTS_CHUNK_MAX_CHARS", 250)
 
-        self.min_gpu_free_mb = _env_int("PODCAST_MIN_GPU_FREE_MB", 1024)
+        self.min_gpu_free_mb = _env_int("PODCAST_MIN_GPU_FREE_MB", 256)
+        self.max_script_lines = _env_int("PODCAST_MAX_SCRIPT_LINES", 15)
         self.node_retry_attempts = _env_int("PODCAST_NODE_RETRY_ATTEMPTS", 3)
 
         self.log_level = os.getenv("PODCAST_LOG_LEVEL", "INFO")
@@ -87,10 +88,16 @@ class Settings:
         return path
 
     def validate_runtime(self) -> None:
+        import shutil
+
         if self.device == "cpu" and not self.allow_cpu:
             raise RuntimeError(
                 "CUDA is not available. Set PODCAST_ALLOW_CPU=true to run on CPU "
                 "(very slow for TTS and music generation)."
+            )
+        if not shutil.which("ffmpeg"):
+            raise RuntimeError(
+                "ffmpeg was not found on PATH. Install ffmpeg before generating podcasts."
             )
 
 

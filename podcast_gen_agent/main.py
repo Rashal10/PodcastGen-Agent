@@ -10,6 +10,7 @@ from .config import settings
 from .graph import get_graph
 from .nodes.script_generator import compute_recursion_limit
 from .state import make_initial_state
+from .utils.audio import configure_pydub
 from .utils.gpu import set_seed
 from .utils.logging_config import setup_logging
 
@@ -50,6 +51,7 @@ def main() -> None:
 
     args = parser.parse_args()
     setup_logging(level=args.log_level, json_logs=args.json_logs)
+    configure_pydub()
 
     if not args.topic and not args.resume:
         parser.error("topic is required unless --resume is provided")
@@ -115,6 +117,9 @@ def main() -> None:
         sys.exit(1)
 
     final_path = result.get("final_audio_path")
+    if not final_path or not Path(final_path).exists() or Path(final_path).stat().st_size == 0:
+        logger.error("Pipeline finished without creating a non-empty MP3 at %s", final_path)
+        sys.exit(1)
     logger.info("=" * 50)
     logger.info("COMPLETE")
     if final_path:

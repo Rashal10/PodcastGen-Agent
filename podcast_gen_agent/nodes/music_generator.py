@@ -21,7 +21,7 @@ def _load_model():
         return _model, _processor
 
     logger.info("Loading MusicGen: %s", settings.music_model)
-    require_gpu_memory()
+    require_gpu_memory(min_free_mb=128)
     from transformers import AutoProcessor, MusicgenForConditionalGeneration
 
     _processor = AutoProcessor.from_pretrained(settings.music_model)
@@ -84,7 +84,7 @@ def music_generator_node(state: PodcastState) -> dict:
     try:
         model, processor = _load_model()
         logger.info("Generating intro and outro music")
-        require_gpu_memory()
+        require_gpu_memory(min_free_mb=128)
         waves = _generate_music(model, processor, [intro_prompt, outro_prompt])
         sample_rate = model.config.audio_encoder.sampling_rate
         import torchaudio

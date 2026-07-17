@@ -8,7 +8,7 @@ from pydub import AudioSegment
 from ..compat import ensure_transformers_compat
 from ..config import settings
 from ..state import PodcastState, coerce_dialogue_line, coerce_script
-from ..utils.audio import normalize_segment
+from ..utils.audio import normalize_segment, write_silent_wav
 from ..utils.decorators import node_handler, with_retries
 from ..utils.gpu import clear_gpu_cache, require_gpu_memory
 from ..utils.text import chunk_text, clean_text_for_tts
@@ -17,6 +17,11 @@ logger = logging.getLogger(__name__)
 
 _tts = None
 _xtts_unavailable = False
+
+
+def _is_recoverable_tts_error(exc: BaseException) -> bool:
+    message = str(exc).lower()
+    return "insufficient gpu memory" in message or "out of memory" in message
 
 
 def _load_tts():
@@ -31,10 +36,14 @@ def _load_tts():
         from TTS.api import TTS
 
         logger.info("Loading XTTS model")
-        require_gpu_memory()
+        require_gpu_memory(min_free_mb=128)
         _tts = TTS(settings.tts_model).to(settings.device)
-    except Exception:
+    except ImportError:
         _xtts_unavailable = True
+        raise
+    except Exception as exc:
+        if not _is_recoverable_tts_error(exc):
+            _xtts_unavailable = True
         raise
 
     available = getattr(_tts, "speakers", None) or []
@@ -112,6 +121,25 @@ def _synthesize_with_espeak(text: str, output_path: Path, speaker: str) -> None:
     )
 
 
+def _synthesize_segment(text: str, voice: str, speaker: str, output_path: Path) -> None:
+    """Try XTTS, then eSpeak, then a silent placeholder so the pipeline can finish."""
+    try:
+        tts = _load_tts()
+        require_gpu_memory(min_free_mb=128)
+        _synthesize_line(tts, text, voice, output_path)
+        return
+    except Exception:
+        logger.exception("XTTS failed; trying eSpeak fallback")
+
+    try:
+        _synthesize_with_espeak(text, output_path, speaker)
+        return
+    except Exception:
+        logger.exception("eSpeak failed; writing silent placeholder audio")
+
+    write_silent_wav(output_path, duration_ms=1500, frame_rate=settings.output_sample_rate)
+
+
 @node_handler("voice")
 def voice_synthesis_node(state: PodcastState) -> dict:
     """Convert one script line to audio."""
@@ -136,13 +164,7 @@ def voice_synthesis_node(state: PodcastState) -> dict:
         cleaned_text[:50],
     )
 
-    try:
-        tts = _load_tts()
-        require_gpu_memory()
-        _synthesize_line(tts, cleaned_text, voice, output_path)
-    except Exception:
-        logger.exception("XTTS failed; using eSpeak fallback for segment %d", idx)
-        _synthesize_with_espeak(cleaned_text, output_path, line.speaker)
+    _synthesize_segment(cleaned_text, voice, line.speaker, output_path)
 
     if not output_path.exists() or output_path.stat().st_size == 0:
         raise RuntimeError(f"TTS produced empty audio file: {output_path}")
@@ -163,7 +185,7 @@ def should_continue_voice(state: PodcastState) -> str:
         return "fail"
 
     idx = state["current_line_idx"]
-    total = len(state["script"])
+    total = len(coerce_script(state["script"]))
 
     if idx < total:
         return "continue"

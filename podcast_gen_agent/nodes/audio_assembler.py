@@ -9,7 +9,7 @@ from pydub.effects import normalize
 from ..config import settings
 from ..nodes.fail import write_success_manifest
 from ..state import PodcastState, coerce_script, topic_slug
-from ..utils.audio import add_fade, concat_with_silence, normalize_segment
+from ..utils.audio import add_fade, concat_with_silence, export_mp3, normalize_segment
 from ..utils.decorators import node_handler
 
 logger = logging.getLogger(__name__)
@@ -83,7 +83,7 @@ def audio_assembler_node(state: PodcastState) -> dict:
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     slug = topic_slug(state["topic"])
     output_path = run_dir / f"podcast_{slug}_{timestamp}.mp3"
-    final.export(str(output_path), format="mp3", bitrate=settings.mp3_bitrate)
+    export_mp3(final, output_path, bitrate=settings.mp3_bitrate)
 
     transcript_path = _write_transcript(state, run_dir)
     _write_rss(state, run_dir, output_path)
