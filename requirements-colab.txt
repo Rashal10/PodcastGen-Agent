@@ -8,6 +8,7 @@ sentencepiece>=0.2.0,<0.3.0
 
 langgraph>=0.2.0,<0.3.0
 langgraph-checkpoint-sqlite>=2.0.0,<3.0.0
+langchain-core>=0.3.23,<0.4.0
 tenacity>=8.2.0,<10.0.0
 
 bitsandbytes>=0.45.0,<1.0.0
