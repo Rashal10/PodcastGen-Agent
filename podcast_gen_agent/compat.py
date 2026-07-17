@@ -25,5 +25,20 @@ def ensure_transformers_compat() -> None:
         import_utils.is_torch_greater_or_equal = _torch_gte
 
 
+def ensure_langchain_compat() -> None:
+    """Patch LangChain 1.x root attributes expected by langchain-core 0.3 on Colab."""
+    try:
+        import langchain
+    except ImportError:
+        return
+
+    if not hasattr(langchain, "debug"):
+        langchain.debug = False
+    if not hasattr(langchain, "verbose"):
+        langchain.verbose = False
+    if not hasattr(langchain, "llm_cache"):
+        langchain.llm_cache = None
+
+
 # Backward-compatible alias
 ensure_tts_transformers_compat = ensure_transformers_compat
