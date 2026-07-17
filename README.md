@@ -15,7 +15,7 @@ The system takes a single topic and orchestrates a series of generative models t
 - **Fully Autonomous Pipeline**: From a single text input to a final `.mp3` podcast with zero human intervention.
 - **Agentic Orchestration**: Leverages LangGraph to create a robust, stateful, and cyclical workflow, enabling tasks like looping through dialogue segments and conditional routing.
 - **Multimodal Generation**: Seamlessly integrates multiple AI capabilities:
-  - **Research**: Web search (DuckDuckGo) for topic information gathering.
+  - **Research**: Wikipedia, arXiv, optional Tavily/Brave APIs, and DuckDuckGo fallback.
   - **Script Writing**: LLM (Qwen2.5-7B) for natural host/guest dialogue.
   - **Voice Synthesis**: Text-to-Speech (XTTS-v2) with distinct voices for host and guest.
   - **Music Generation**: Text-to-Music (MusicGen) for intro/outro jingles.
@@ -116,19 +116,94 @@ Environment variables (all optional):
 | `PODCAST_ALLOW_CPU` | `false` | Allow CPU-only execution |
 | `PODCAST_LLM_MODEL` | `Qwen/Qwen2.5-7B-Instruct` | Script LLM |
 | `PODCAST_TTS_MODEL` | `xtts_v2` path | TTS model |
-| `PODCAST_HOST_VOICE` | `Claribel Dervla` | Host speaker |
-| `PODCAST_GUEST_VOICE` | `Daisy Studious` | Guest speaker |
-| `PODCAST_LOG_LEVEL` | `INFO` | Log level |
+| `PODCAST_HOST_VOICE` | `Andrew Chipper` | Host XTTS preset speaker |
+| `PODCAST_GUEST_VOICE` | `Ana Florence` | Guest XTTS preset speaker |
+| `PODCAST_HOST_SPEAKER_WAV` | unset | Host voice-clone reference WAV (6 to 30 seconds) |
+| `PODCAST_GUEST_SPEAKER_WAV` | unset | Guest voice-clone reference WAV (6 to 30 seconds) |
+| `PODCAST_TTS_SPLIT_SENTENCES` | `true` | Let XTTS split sentences for more natural prosody |
+| `PODCAST_TTS_EXPAND_ABBREVIATIONS` | `false` | Expand `AI` to `A.I.` before TTS |
+| `PODCAST_RESEARCH_PROVIDERS` | `wikipedia,arxiv,tavily,brave,duckduckgo` | Provider order |
+| `PODCAST_TAVILY_API_KEY` | unset | Tavily search API key |
+| `PODCAST_BRAVE_API_KEY` | unset | Brave Search API key |
 | `COQUI_TOS_AGREED` | unset | Must be `1` for XTTS |
+| `PODCAST_LOG_LEVEL` | `INFO` | Log level |
 
-**Google Colab**: Upload `podcast_gen_colab.ipynb`, select a **GPU runtime** (T4 is fine), and run all cells in order.
+### Research providers
 
-Colab notes:
-- Use the notebook install cell (not `requirements.txt` directly). Colab already ships its CUDA-enabled PyTorch stack.
+The research node runs providers in the order set by `PODCAST_RESEARCH_PROVIDERS`.
+
+| Provider | API key | Best for |
+|----------|---------|----------|
+| `wikipedia` | No | General topics, stable summaries |
+| `arxiv` | No | AI, ML, and technical papers |
+| `tavily` | Yes | Agent-style web search |
+| `brave` | Yes | General web search |
+| `duckduckgo` | No | Last-resort fallback on Colab |
+
+Free default flow: **Wikipedia + arXiv + DuckDuckGo fallback**.
+
+### Voice options
+
+1. **Preset XTTS speakers** (default): `Andrew Chipper` + `Ana Florence`
+2. **Voice cloning**: set `PODCAST_HOST_SPEAKER_WAV` and `PODCAST_GUEST_SPEAKER_WAV` to 6 to 30 second WAV clips
+
+Example:
+
+```bash
+export PODCAST_HOST_SPEAKER_WAV="./voices/host_ref.wav"
+export PODCAST_GUEST_SPEAKER_WAV="./voices/guest_ref.wav"
+python -m podcast_gen_agent.main "LoRA and QLoRA" --duration 2
+```
+
+### API keys (easy setup)
+
+#### Tavily
+
+1. Go to [https://tavily.com](https://tavily.com)
+2. Sign up for a free account
+3. Open the dashboard and copy your API key
+4. Set it in Colab or your shell:
+
+```bash
+export PODCAST_TAVILY_API_KEY="tvly-xxxxxxxx"
+```
+
+In Colab:
+
+```python
+import os
+os.environ["PODCAST_TAVILY_API_KEY"] = "tvly-xxxxxxxx"
+```
+
+#### Brave Search
+
+1. Go to [https://brave.com/search/api](https://brave.com/search/api)
+2. Create an account and subscribe to the free plan
+3. Create an API key in the dashboard
+4. Set it:
+
+```bash
+export PODCAST_BRAVE_API_KEY="BSA-xxxxxxxx"
+```
+
+You can use either Tavily or Brave, or both. Providers without a key are skipped automatically.
+
+**Google Colab / Kaggle**: Upload `podcast_gen_colab.ipynb`, enable a **GPU**, and run all cells in order.
+
+Colab:
+- Select **Runtime → Change runtime type → T4 GPU**.
+
+Kaggle:
+- Set **Accelerator → GPU T4 x2** (or GPU P100).
+- Turn **Internet** ON so `git clone` and `pip install` work.
+- The notebook clones into `/kaggle/working/PodcastGen-Agent` (Colab uses `/content/PodcastGen-Agent`).
+
+Notebook notes:
+- Use the notebook install cell (not `requirements.txt` directly). Colab and Kaggle already ship a CUDA-enabled PyTorch stack.
 - The notebook pins `coqui-tts==0.27.5`, `transformers==4.57.5`, and `tokenizers==0.22.1`.
-- MusicGen runs through Hugging Face Transformers because Audiocraft 1.3 is incompatible with current Colab Python and PyTorch versions.
+- MusicGen runs through Hugging Face Transformers because Audiocraft 1.3 is incompatible with current Colab/Kaggle Python and PyTorch versions.
 - Warnings about `gradio` or `langchain` version conflicts are safe to ignore.
-- If install fails, use **Runtime → Restart session** and re-run from cell 1.
+- If install fails on Colab, use **Runtime → Restart session** and re-run from cell 1. On Kaggle, restart the session and re-run from cell 1.
 
 If XTTS or MusicGen cannot initialize, the pipeline uses local eSpeak speech
 and generated musical stings so that it can still produce an MP3.
