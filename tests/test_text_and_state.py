@@ -9,12 +9,20 @@ from podcast_gen_agent.utils.slug import sanitize_topic_slug
 from podcast_gen_agent.utils.text import chunk_text, clean_text_for_tts
 
 
-def test_clean_text_for_tts_expands_abbreviations():
+def test_clean_text_for_tts_expands_abbreviations_when_enabled(monkeypatch):
+    from podcast_gen_agent import config
+
+    monkeypatch.setattr(config.settings, "tts_expand_abbreviations", True)
     result = clean_text_for_tts("AI and GPU APIs are core to ML.")
     assert "A.I." in result
     assert "G.P.U." in result
     assert "A.P.I" in result.replace(" ", "")
     assert "M.L." in result
+
+
+def test_clean_text_for_tts_keeps_abbreviations_by_default():
+    result = clean_text_for_tts("AI and GPU APIs are core to ML.")
+    assert result == "AI and GPU APIs are core to ML."
 
 
 def test_chunk_text_splits_long_sentences():
