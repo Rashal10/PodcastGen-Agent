@@ -14,7 +14,6 @@ bitsandbytes>=0.45.0,<1.0.0
 accelerate>=1.0.0,<2.0.0
 
 coqui-tts==0.27.5
-torchcodec
 
 num2words
 einops
