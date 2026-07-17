@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Colab / Linux GPU install script for PodcastGen-Agent.
+# Colab / Kaggle / Linux GPU install script for PodcastGen-Agent.
 set -euo pipefail
 
 pip install -q --upgrade pip
