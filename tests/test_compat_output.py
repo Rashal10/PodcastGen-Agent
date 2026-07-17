@@ -1,6 +1,7 @@
+import sys
 from pathlib import Path
 
-from podcast_gen_agent.compat import ensure_transformers_compat
+from podcast_gen_agent.compat import ensure_langchain_compat, ensure_transformers_compat
 from podcast_gen_agent.utils.output import find_latest_podcast
 
 
@@ -19,6 +20,23 @@ def test_ensure_transformers_compat_patches_missing_symbols(monkeypatch):
     assert hasattr(import_utils, "is_torch_greater_or_equal")
     assert import_utils.is_torch_greater_or_equal("0.0.0") is True
     assert import_utils.is_torch_greater_or_equal("99.0.0") is False
+
+
+def test_ensure_langchain_compat_patches_missing_root_attrs(monkeypatch):
+    import types
+
+    fake_langchain = types.ModuleType("langchain")
+    monkeypatch.setitem(sys.modules, "langchain", fake_langchain)
+
+    ensure_langchain_compat()
+
+    assert fake_langchain.debug is False
+    assert fake_langchain.verbose is False
+    assert fake_langchain.llm_cache is None
+
+    from langchain_core.globals import get_debug
+
+    assert get_debug() is False
 
 
 def test_find_latest_podcast_nested(tmp_path: Path):
