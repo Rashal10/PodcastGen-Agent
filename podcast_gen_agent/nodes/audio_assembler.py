@@ -8,7 +8,7 @@ from pydub.effects import normalize
 
 from ..config import settings
 from ..nodes.fail import write_success_manifest
-from ..state import PodcastState, topic_slug
+from ..state import PodcastState, coerce_script, topic_slug
 from ..utils.audio import add_fade, concat_with_silence, normalize_segment
 from ..utils.decorators import node_handler
 
@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 def _write_transcript(state: PodcastState, run_dir: Path) -> str:
     lines = ["# Podcast Transcript", f"Topic: {state['topic']}", ""]
-    for line in state["script"]:
+    for line in coerce_script(state["script"]):
         lines.append(f"[{line.speaker.title()}]: {line.text}")
     transcript_path = run_dir / "transcript.txt"
     transcript_path.write_text("\n".join(lines), encoding="utf-8")
