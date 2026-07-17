@@ -5,7 +5,7 @@ from __future__ import annotations
 import subprocess
 import sys
 
-HF_STACK = ("transformers==4.43.3", "tokenizers==0.19.1")
+HF_STACK = ("transformers==4.46.3", "tokenizers==0.20.3")
 NUMPY_STACK = ("numpy>=2.0,<2.3", "scipy>=1.12.0,<2.0.0")
 
 
@@ -24,6 +24,27 @@ def pin_numpy_stack() -> None:
 def pin_hf_stack() -> None:
     """Force transformers + tokenizers versions required by XTTS and Qwen."""
     _pip(*HF_STACK, extra=["--force-reinstall"])
+
+
+def ensure_hf_compat() -> None:
+    import torch
+    import transformers.pytorch_utils as pytorch_utils
+    import transformers.utils.import_utils as import_utils
+
+    if not hasattr(pytorch_utils, "isin_mps_friendly"):
+        pytorch_utils.isin_mps_friendly = torch.isin
+
+    if not hasattr(import_utils, "is_torch_greater_or_equal"):
+        def is_torch_greater_or_equal(version_str: str, /) -> bool:
+            cur = tuple(int(x) for x in torch.__version__.split("+")[0].split(".")[:3])
+            tgt = tuple(int(x) for x in version_str.split(".")[:3])
+            while len(cur) < 3:
+                cur += (0,)
+            while len(tgt) < 3:
+                tgt += (0,)
+            return cur >= tgt
+
+        import_utils.is_torch_greater_or_equal = is_torch_greater_or_equal
 
 
 def install_colab_dependencies() -> None:
@@ -67,10 +88,8 @@ def verify_colab_imports() -> None:
     import tokenizers
     import torch
     import transformers
-    import transformers.pytorch_utils as pytorch_utils
 
-    if not hasattr(pytorch_utils, "isin_mps_friendly"):
-        pytorch_utils.isin_mps_friendly = torch.isin
+    ensure_hf_compat()
 
     from TTS.api import TTS
     from audiocraft.models import MusicGen
