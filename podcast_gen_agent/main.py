@@ -29,6 +29,21 @@ def main() -> None:
     parser.add_argument("--output-dir", type=str, help="Directory for generated files")
     parser.add_argument("--host-voice", type=str, help="XTTS speaker name for the host")
     parser.add_argument("--guest-voice", type=str, help="XTTS speaker name for the guest")
+    parser.add_argument(
+        "--host-speaker-wav",
+        type=str,
+        help="Reference WAV for host voice cloning (6 to 30 seconds)",
+    )
+    parser.add_argument(
+        "--guest-speaker-wav",
+        type=str,
+        help="Reference WAV for guest voice cloning (6 to 30 seconds)",
+    )
+    parser.add_argument(
+        "--research-providers",
+        type=str,
+        help="Comma-separated providers: wikipedia,arxiv,tavily,brave,duckduckgo",
+    )
     parser.add_argument("--seed", type=int, help="Random seed for reproducible generation")
     parser.add_argument("--run-id", type=str, help="Custom run identifier")
     parser.add_argument(
@@ -62,6 +77,12 @@ def main() -> None:
         settings.host_voice = args.host_voice
     if args.guest_voice:
         settings.guest_voice = args.guest_voice
+    if args.host_speaker_wav:
+        settings.host_speaker_wav = args.host_speaker_wav
+    if args.guest_speaker_wav:
+        settings.guest_speaker_wav = args.guest_speaker_wav
+    if args.research_providers:
+        settings.research_providers = settings._parse_provider_list(args.research_providers)
 
     settings.ensure_output_dir()
 
