@@ -4,8 +4,11 @@ import sys
 import traceback
 from pathlib import Path
 
+from langgraph.errors import GraphRecursionError
+
 from .config import settings
 from .graph import get_graph
+from .nodes.script_generator import compute_recursion_limit
 from .state import make_initial_state
 from .utils.gpu import set_seed
 from .utils.logging_config import setup_logging
@@ -80,11 +83,16 @@ def main() -> None:
     logger.info("=" * 50)
 
     graph = get_graph()
+    recursion_limit = compute_recursion_limit(duration)
+    logger.info("LangGraph recursion limit: %d", recursion_limit)
 
     if args.resume:
         thread_id = args.resume
         logger.info("Resuming run %s", thread_id)
-        config = {"configurable": {"thread_id": thread_id}}
+        config = {
+            "configurable": {"thread_id": thread_id},
+            "recursion_limit": recursion_limit,
+        }
         result = graph.invoke(None, config=config)
     else:
         initial_state = make_initial_state(
@@ -94,7 +102,10 @@ def main() -> None:
             seed=args.seed,
         )
         thread_id = initial_state["run_id"]
-        config = {"configurable": {"thread_id": thread_id}}
+        config = {
+            "configurable": {"thread_id": thread_id},
+            "recursion_limit": recursion_limit,
+        }
         result = graph.invoke(initial_state, config=config)
 
     if result.get("error"):
@@ -119,6 +130,12 @@ def main() -> None:
 if __name__ == "__main__":
     try:
         main()
+    except GraphRecursionError:
+        logger.error(
+            "LangGraph recursion limit reached. Lower DURATION or increase the limit "
+            "with compute_recursion_limit() in main.py."
+        )
+        sys.exit(1)
     except Exception:
-        logger.error("Unhandled error:\n%s", traceback.format_exc())
+        logging.getLogger(__name__).error("Unhandled error:\n%s", traceback.format_exc())
         sys.exit(1)
