@@ -7,7 +7,7 @@ pip install -q --upgrade pip
 # Keep Colab numpy 2.x; downgrading numpy breaks scipy (numpy.char).
 pip install -q --upgrade "numpy>=2.0,<2.3" "scipy>=1.12.0,<2.0.0"
 
-pip install -q "transformers==4.43.3" "tokenizers>=0.19,<0.20"
+pip install -q "transformers==4.43.3" "tokenizers==0.19.1"
 pip install -q \
   "langgraph>=0.2.0,<0.3.0" \
   "langgraph-checkpoint-sqlite>=2.0.0,<3.0.0" \
@@ -19,13 +19,13 @@ pip install -q \
   "tqdm>=4.66.0,<5.0.0"
 
 pip install -q "coqui-tts>=0.24.0,<0.28.0"
-pip install -q --force-reinstall --no-deps "transformers==4.43.3"
+pip install -q --force-reinstall "transformers==4.43.3" "tokenizers==0.19.1"
 
 pip install -q "av>=12.0.0"
 pip install -q "audiocraft==1.3.0" --no-deps
 pip install -q encodec flashy num2words hydra-core hydra-colorlog torchmetrics demucs einops
 
-pip install -q --force-reinstall --no-deps "transformers==4.43.3"
+pip install -q --force-reinstall "transformers==4.43.3" "tokenizers==0.19.1"
 pip install -q --upgrade "numpy>=2.0,<2.3" "scipy>=1.12.0,<2.0.0"
 
 apt-get install -qq ffmpeg
