@@ -49,11 +49,26 @@ class Settings:
         self.output_sample_rate = _env_int("PODCAST_OUTPUT_SAMPLE_RATE", 44100)
         self.music_duration_secs = _env_int("PODCAST_MUSIC_DURATION_SECS", 12)
 
-        self.host_voice = os.getenv("PODCAST_HOST_VOICE", "Claribel Dervla")
-        self.guest_voice = os.getenv("PODCAST_GUEST_VOICE", "Daisy Studious")
+        self.host_voice = os.getenv("PODCAST_HOST_VOICE", "Andrew Chipper")
+        self.guest_voice = os.getenv("PODCAST_GUEST_VOICE", "Ana Florence")
+        self.host_speaker_wav = os.getenv("PODCAST_HOST_SPEAKER_WAV", "")
+        self.guest_speaker_wav = os.getenv("PODCAST_GUEST_SPEAKER_WAV", "")
         self.tts_language = os.getenv("PODCAST_TTS_LANGUAGE", "en")
+        self.tts_split_sentences = _env_bool("PODCAST_TTS_SPLIT_SENTENCES", default=True)
+        self.tts_expand_abbreviations = _env_bool(
+            "PODCAST_TTS_EXPAND_ABBREVIATIONS",
+            default=False,
+        )
 
         self.research_max_results = _env_int("PODCAST_RESEARCH_MAX_RESULTS", 5)
+        self.research_providers = self._parse_provider_list(
+            os.getenv(
+                "PODCAST_RESEARCH_PROVIDERS",
+                "wikipedia,arxiv,tavily,brave,duckduckgo",
+            )
+        )
+        self.tavily_api_key = os.getenv("PODCAST_TAVILY_API_KEY", "")
+        self.brave_api_key = os.getenv("PODCAST_BRAVE_API_KEY", "")
         self.segment_silence_ms = _env_int("PODCAST_SEGMENT_SILENCE_MS", 300)
         self.music_duck_db = _env_int("PODCAST_MUSIC_DUCK_DB", 6)
         self.mp3_bitrate = os.getenv("PODCAST_MP3_BITRATE", "192k")
@@ -68,6 +83,30 @@ class Settings:
 
         self.log_level = os.getenv("PODCAST_LOG_LEVEL", "INFO")
         self.log_json = _env_bool("PODCAST_LOG_JSON", default=False)
+
+    @staticmethod
+    def _parse_provider_list(raw: str) -> list[str]:
+        providers = [part.strip().lower() for part in raw.split(",") if part.strip()]
+        allowed = {"wikipedia", "arxiv", "tavily", "brave", "duckduckgo"}
+        return [provider for provider in providers if provider in allowed]
+
+    def speaker_wav_for(self, speaker: str) -> str:
+        if speaker == "host":
+            return self.host_speaker_wav
+        if speaker == "guest":
+            return self.guest_speaker_wav
+        return ""
+
+    def resolved_speaker_wav(self, speaker: str) -> Path | None:
+        raw_path = self.speaker_wav_for(speaker).strip()
+        if not raw_path:
+            return None
+        path = Path(raw_path).expanduser().resolve()
+        if not path.exists():
+            raise FileNotFoundError(f"Speaker reference WAV not found: {path}")
+        if path.stat().st_size == 0:
+            raise ValueError(f"Speaker reference WAV is empty: {path}")
+        return path
 
     @property
     def quantization_config(self) -> dict:
@@ -117,3 +156,5 @@ MUSIC_DURATION_SECS = settings.music_duration_secs
 QUANTIZATION_CONFIG = settings.quantization_config
 HOST_VOICE = settings.host_voice
 GUEST_VOICE = settings.guest_voice
+HOST_SPEAKER_WAV = settings.host_speaker_wav
+GUEST_SPEAKER_WAV = settings.guest_speaker_wav
