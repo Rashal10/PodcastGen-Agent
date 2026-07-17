@@ -1,5 +1,5 @@
-# Colab-only dependencies.
-# Do not install torch/torchaudio/torchvision here; Colab already provides them.
+# Colab / Kaggle notebook dependencies.
+# Do not install torch/torchaudio/torchvision here; those platforms already provide them.
 # Install with: pip install -r requirements-colab.txt
 
 transformers==4.57.5
