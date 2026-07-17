@@ -15,6 +15,22 @@ class DialogueLine:
     audio_path: str | None = None
 
 
+def coerce_dialogue_line(line: DialogueLine | dict) -> DialogueLine:
+    """Normalize checkpoint or JSON state back into DialogueLine objects."""
+    if isinstance(line, DialogueLine):
+        return line
+    return DialogueLine(
+        speaker=str(line["speaker"]).lower(),
+        text=str(line["text"]),
+        audio_path=line.get("audio_path"),
+    )
+
+
+def coerce_script(script: list[DialogueLine | dict]) -> list[DialogueLine]:
+    """Normalize a script list after LangGraph checkpoint round-trips."""
+    return [coerce_dialogue_line(line) for line in script]
+
+
 class SourceInfo(TypedDict):
     title: str
     body: str
