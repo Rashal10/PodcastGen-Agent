@@ -12,7 +12,18 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def install_colab_dependencies() -> None:
     subprocess.run(
-        [sys.executable, "-m", "pip", "uninstall", "-y", "TTS", "audiocraft"],
+        [
+            sys.executable,
+            "-m",
+            "pip",
+            "uninstall",
+            "-y",
+            "TTS",
+            "audiocraft",
+            "langchain",
+            "langchain-community",
+            "langchain-text-splitters",
+        ],
         check=False,
     )
     subprocess.check_call(
@@ -36,9 +47,12 @@ def verify_colab_imports() -> None:
     import torch
     import transformers
 
-    from podcast_gen_agent.compat import ensure_transformers_compat
+    from podcast_gen_agent.compat import ensure_langchain_compat, ensure_transformers_compat
 
     ensure_transformers_compat()
+    ensure_langchain_compat()
+
+    from langchain_core.globals import get_debug
 
     from transformers import MusicgenForConditionalGeneration  # noqa: F401
     from TTS.api import TTS  # noqa: F401
@@ -52,6 +66,7 @@ def verify_colab_imports() -> None:
 
     assert version.parse(transformers.__version__) >= version.parse("4.57.5")
     assert version.parse(tokenizers.__version__) >= version.parse("0.22.0")
+    assert get_debug() in (True, False)
     get_graph()
 
     print("torch", torch.__version__)
