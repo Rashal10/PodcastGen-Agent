@@ -1,21 +1,24 @@
 import re
 
+from ..config import settings
+
 
 def clean_text_for_tts(text: str) -> str:
     """Clean text for better TTS output."""
     text = re.sub(r"\*\*(.+?)\*\*", r"\1", text)
     text = re.sub(r"\*(.+?)\*", r"\1", text)
 
-    abbrevs = {
-        "APIs": "A.P.I.s",
-        "AI": "A.I.",
-        "ML": "M.L.",
-        "API": "A.P.I.",
-        "GPU": "G.P.U.",
-        "CPU": "C.P.U.",
-    }
-    for abbr, expanded in abbrevs.items():
-        text = re.sub(rf"\b{abbr}\b", expanded, text)
+    if settings.tts_expand_abbreviations:
+        abbrevs = {
+            "APIs": "A.P.I.s",
+            "AI": "A.I.",
+            "ML": "M.L.",
+            "API": "A.P.I.",
+            "GPU": "G.P.U.",
+            "CPU": "C.P.U.",
+        }
+        for abbr, expanded in abbrevs.items():
+            text = re.sub(rf"\b{abbr}\b", expanded, text)
 
     text = " ".join(text.split())
     return text
