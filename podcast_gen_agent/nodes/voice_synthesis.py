@@ -7,7 +7,7 @@ from pydub import AudioSegment
 
 from ..compat import ensure_transformers_compat
 from ..config import settings
-from ..state import PodcastState
+from ..state import PodcastState, coerce_dialogue_line, coerce_script
 from ..utils.audio import normalize_segment
 from ..utils.decorators import node_handler, with_retries
 from ..utils.gpu import clear_gpu_cache, require_gpu_memory
@@ -116,12 +116,12 @@ def _synthesize_with_espeak(text: str, output_path: Path, speaker: str) -> None:
 def voice_synthesis_node(state: PodcastState) -> dict:
     """Convert one script line to audio."""
     idx = state["current_line_idx"]
-    script = state["script"]
+    script = coerce_script(state["script"])
 
     if idx >= len(script):
         return {"current_line_idx": idx}
 
-    line = script[idx]
+    line = coerce_dialogue_line(script[idx])
     voice = settings.host_voice if line.speaker == "host" else settings.guest_voice
     cleaned_text = clean_text_for_tts(line.text)
 
