@@ -32,6 +32,11 @@ def compute_target_lines(duration_mins: int) -> int:
     return max(duration_mins * 15, 10)
 
 
+def compute_recursion_limit(duration_mins: int) -> int:
+    """LangGraph step budget for research, script, voice loop, music, and assembly."""
+    return compute_target_lines(duration_mins) + 25
+
+
 def _load_model():
     global _model, _tokenizer
     if _model is not None:
