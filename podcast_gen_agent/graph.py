@@ -24,7 +24,7 @@ def build_graph(checkpointer: SqliteSaver | None = None) -> CompiledStateGraph:
     graph = StateGraph(PodcastState)
 
     graph.add_node("research", research_node)
-    graph.add_node("script", script_generator_node)
+    graph.add_node("generate_script", script_generator_node)
     graph.add_node("voice", voice_synthesis_node)
     graph.add_node("music", music_generator_node)
     graph.add_node("assemble", audio_assembler_node)
@@ -34,11 +34,11 @@ def build_graph(checkpointer: SqliteSaver | None = None) -> CompiledStateGraph:
 
     graph.add_conditional_edges(
         "research",
-        lambda state: _route_on_error(state, "script"),
-        {"fail": "fail", "script": "script"},
+        lambda state: _route_on_error(state, "generate_script"),
+        {"fail": "fail", "generate_script": "generate_script"},
     )
     graph.add_conditional_edges(
-        "script",
+        "generate_script",
         lambda state: _route_on_error(state, "voice"),
         {"fail": "fail", "voice": "voice"},
     )

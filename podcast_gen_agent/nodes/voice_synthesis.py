@@ -1,9 +1,11 @@
 import logging
+import subprocess
 from pathlib import Path
+from typing import Any
 
 from pydub import AudioSegment
 
-from ..compat import ensure_tts_transformers_compat
+from ..compat import ensure_transformers_compat
 from ..config import settings
 from ..state import PodcastState
 from ..utils.audio import normalize_segment
@@ -14,19 +16,26 @@ from ..utils.text import chunk_text, clean_text_for_tts
 logger = logging.getLogger(__name__)
 
 _tts = None
+_xtts_unavailable = False
 
 
 def _load_tts():
-    global _tts
+    global _tts, _xtts_unavailable
     if _tts is not None:
         return _tts
+    if _xtts_unavailable:
+        raise RuntimeError("XTTS was disabled after an earlier initialization failure")
 
-    ensure_tts_transformers_compat()
-    from TTS.api import TTS
+    try:
+        ensure_transformers_compat()
+        from TTS.api import TTS
 
-    logger.info("Loading XTTS model")
-    require_gpu_memory()
-    _tts = TTS(settings.tts_model).to(settings.device)
+        logger.info("Loading XTTS model")
+        require_gpu_memory()
+        _tts = TTS(settings.tts_model).to(settings.device)
+    except Exception:
+        _xtts_unavailable = True
+        raise
 
     available = getattr(_tts, "speakers", None) or []
     for voice in (settings.host_voice, settings.guest_voice):
@@ -48,7 +57,7 @@ def unload_tts() -> None:
 
 
 @with_retries()
-def _synthesize_line(tts: TTS, text: str, voice: str, output_path: Path) -> None:
+def _synthesize_line(tts: Any, text: str, voice: str, output_path: Path) -> None:
     chunks = chunk_text(text, max_chars=settings.tts_chunk_max_chars)
     if len(chunks) == 1:
         tts.tts_to_file(
@@ -83,11 +92,29 @@ def _synthesize_line(tts: TTS, text: str, voice: str, output_path: Path) -> None
         path.unlink(missing_ok=True)
 
 
+def _synthesize_with_espeak(text: str, output_path: Path, speaker: str) -> None:
+    """Use eSpeak as a reliable CPU fallback when XTTS cannot run."""
+    voice = "en-us+f3" if speaker == "host" else "en-us+m3"
+    subprocess.run(
+        [
+            "espeak-ng",
+            "-v",
+            voice,
+            "-s",
+            "155",
+            "-w",
+            str(output_path),
+            text,
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+
 @node_handler("voice")
 def voice_synthesis_node(state: PodcastState) -> dict:
     """Convert one script line to audio."""
-    tts = _load_tts()
-
     idx = state["current_line_idx"]
     script = state["script"]
 
@@ -109,8 +136,13 @@ def voice_synthesis_node(state: PodcastState) -> dict:
         cleaned_text[:50],
     )
 
-    require_gpu_memory()
-    _synthesize_line(tts, cleaned_text, voice, output_path)
+    try:
+        tts = _load_tts()
+        require_gpu_memory()
+        _synthesize_line(tts, cleaned_text, voice, output_path)
+    except Exception:
+        logger.exception("XTTS failed; using eSpeak fallback for segment %d", idx)
+        _synthesize_with_espeak(cleaned_text, output_path, line.speaker)
 
     if not output_path.exists() or output_path.stat().st_size == 0:
         raise RuntimeError(f"TTS produced empty audio file: {output_path}")
@@ -137,5 +169,5 @@ def should_continue_voice(state: PodcastState) -> str:
         return "continue"
 
     logger.info("All %d voice segments complete", total)
-    clear_gpu_cache()
+    unload_tts()
     return "done"

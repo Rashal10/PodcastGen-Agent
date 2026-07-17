@@ -4,51 +4,34 @@ set -euo pipefail
 
 pip install -q --upgrade pip
 
-# Keep Colab numpy 2.x; downgrading numpy breaks scipy (numpy.char).
-pip install -q --upgrade "numpy>=2.0,<2.3" "scipy>=1.12.0,<2.0.0"
+pip uninstall -y TTS audiocraft || true
+pip install -q -r requirements-colab.txt
+pip install -q -e . --no-deps
 
-pip install -q "transformers==4.46.3" "tokenizers==0.20.3"
-pip install -q \
-  "langgraph>=0.2.0,<0.3.0" \
-  "langgraph-checkpoint-sqlite>=2.0.0,<3.0.0" \
-  "tenacity>=8.2.0,<10.0.0" \
-  "bitsandbytes>=0.43.0,<0.46.0" \
-  "accelerate>=0.28.0,<1.0.0" \
-  "duckduckgo-search>=6.0.0,<7.0.0" \
-  "pydub>=0.25.0,<0.26.0" \
-  "tqdm>=4.66.0,<5.0.0"
-
-pip install -q "coqui-tts>=0.24.0,<0.28.0"
-pip install -q --force-reinstall "transformers==4.46.3" "tokenizers==0.20.3"
-
-pip install -q "av>=12.0.0"
-pip install -q "audiocraft==1.3.0" --no-deps
-pip install -q encodec flashy num2words hydra-core hydra-colorlog torchmetrics demucs einops
-
-pip install -q --force-reinstall "transformers==4.46.3" "tokenizers==0.20.3"
-pip install -q --upgrade "numpy>=2.0,<2.3" "scipy>=1.12.0,<2.0.0"
-
-apt-get install -qq ffmpeg
+apt-get update -qq
+apt-get install -y -qq ffmpeg espeak-ng
 
 python - <<'PY'
-import numpy as np
-import scipy
+import shutil
 import torch
+import tokenizers
 import transformers
+from podcast_gen_agent.compat import ensure_transformers_compat
 
-try:
-    from transformers.pytorch_utils import isin_mps_friendly
-except ImportError:
-    import transformers.pytorch_utils as pytorch_utils
-    pytorch_utils.isin_mps_friendly = torch.isin
+ensure_transformers_compat()
 
 from TTS.api import TTS
-from audiocraft.models import MusicGen
-import langgraph
+from transformers import MusicgenForConditionalGeneration
+from podcast_gen_agent.graph import get_graph
 
-print("numpy", np.__version__)
-print("scipy", scipy.__version__)
+assert torch.cuda.is_available(), "GPU runtime is not enabled"
+assert shutil.which("ffmpeg"), "ffmpeg is missing"
+assert shutil.which("espeak-ng"), "espeak-ng is missing"
+assert transformers.__version__ == "4.57.5"
+assert tokenizers.__version__ == "0.22.1"
+get_graph()
 print("transformers", transformers.__version__)
+print("tokenizers", tokenizers.__version__)
 print("torch", torch.__version__)
-print("TTS OK, audiocraft OK, langgraph OK")
+print("XTTS, MusicGen, LangGraph, ffmpeg, and eSpeak are ready")
 PY

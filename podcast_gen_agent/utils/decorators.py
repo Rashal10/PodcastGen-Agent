@@ -1,7 +1,7 @@
 import logging
 import time
+from collections.abc import Callable
 from functools import wraps
-from typing import Any, Callable
 
 from tenacity import retry, stop_after_attempt, wait_exponential
 

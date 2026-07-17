@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from operator import add
-from typing import Annotated, List, Optional, TypedDict
+from typing import Annotated, TypedDict
 
 from .config import settings
 from .utils.slug import new_run_id, sanitize_topic_slug
@@ -12,7 +12,7 @@ class DialogueLine:
 
     speaker: str  # "host" or "guest"
     text: str
-    audio_path: Optional[str] = None
+    audio_path: str | None = None
 
 
 class SourceInfo(TypedDict):
@@ -27,15 +27,15 @@ class PodcastState(TypedDict):
     run_id: str
     topic: str
     duration_mins: int
-    seed: Optional[int]
+    seed: int | None
 
     research_data: str
-    sources: Annotated[List[SourceInfo], add]
+    sources: Annotated[list[SourceInfo], add]
 
-    script: List[DialogueLine]
+    script: list[DialogueLine]
     current_line_idx: int
 
-    audio_segments: Annotated[List[str], add]
+    audio_segments: Annotated[list[str], add]
     intro_music_path: str
     outro_music_path: str
 
@@ -44,7 +44,7 @@ class PodcastState(TypedDict):
     manifest_path: str
 
     node_timings: dict
-    error: Optional[str]
+    error: str | None
 
 
 def make_initial_state(

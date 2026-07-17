@@ -5,12 +5,10 @@ from pathlib import Path
 
 from ..config import settings
 from ..state import PodcastState
-from ..utils.decorators import node_handler
 
 logger = logging.getLogger(__name__)
 
 
-@node_handler("fail")
 def fail_node(state: PodcastState) -> dict:
     """Terminal node that records pipeline failure details."""
     error = state.get("error") or "Unknown pipeline error"

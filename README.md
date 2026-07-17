@@ -32,7 +32,7 @@ The core of this project is a stateful graph managed by **LangGraph**. The graph
 | Orchestration       | `langgraph`                            |
 | LLM & Transformers  | `transformers`, `bitsandbytes` (4-bit) |
 | Text-to-Speech      | `TTS` (Coqui XTTS-v2)                  |
-| Music Generation    | `audiocraft` (MusicGen)                |
+| Music Generation    | Hugging Face `transformers` (MusicGen)  |
 | Audio Assembly      | `pydub`, `scipy`                       |
 | Core Framework      | `torch`                                |
 
@@ -124,11 +124,14 @@ Environment variables (all optional):
 **Google Colab**: Upload `podcast_gen_colab.ipynb`, select a **GPU runtime** (T4 is fine), and run all cells in order.
 
 Colab notes:
-- Use the notebook install cell (not `requirements.txt` directly). Colab already ships torch; the notebook keeps numpy 2.x and pins `transformers==4.43.3` for XTTS.
+- Use the notebook install cell (not `requirements.txt` directly). Colab already ships its CUDA-enabled PyTorch stack.
+- The notebook pins `coqui-tts==0.27.5`, `transformers==4.57.5`, and `tokenizers==0.22.1`.
+- MusicGen runs through Hugging Face Transformers because Audiocraft 1.3 is incompatible with current Colab Python and PyTorch versions.
 - Warnings about `gradio` or `langchain` version conflicts are safe to ignore.
 - If install fails, use **Runtime → Restart session** and re-run from cell 1.
 
-If you see `ImportError: cannot import name 'isin_mps_friendly'`, re-run the install cell.
+If XTTS or MusicGen cannot initialize, the pipeline uses local eSpeak speech
+and generated musical stings so that it can still produce an MP3.
 
 Generated files are written to `outputs/<run_id>/podcast_*.mp3`, not directly under `outputs/`.
 

@@ -2,7 +2,6 @@ import logging
 import re
 
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
 from ..config import settings
 from ..state import DialogueLine, PodcastState
@@ -40,6 +39,7 @@ def _load_model():
 
     logger.info("Loading LLM: %s", settings.llm_model)
     require_gpu_memory()
+    from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
     quant_config = BitsAndBytesConfig(**settings.quantization_config)
     _tokenizer = AutoTokenizer.from_pretrained(settings.llm_model)
@@ -113,19 +113,44 @@ def _generate_script_text(
     return tokenizer.decode(generated_tokens, skip_special_tokens=True).strip()
 
 
-def _fallback_script(topic: str) -> list[DialogueLine]:
-    return [
+def _fallback_script(topic: str, research: str = "") -> list[DialogueLine]:
+    context = " ".join(research.split())
+    if len(context) > 500:
+        context = context[:500].rsplit(" ", 1)[0]
+    lines = [
         DialogueLine("host", f"Welcome to our podcast about {topic}."),
         DialogueLine("guest", f"Thanks for having me. {topic} is a fascinating subject."),
-        DialogueLine("host", "Let us dive in."),
+        DialogueLine("host", "Let us begin with the essential context."),
     ]
+    if context:
+        lines.append(DialogueLine("guest", context))
+    lines.extend(
+        [
+            DialogueLine(
+                "host",
+                f"What should listeners remember most when they think about {topic}?",
+            ),
+            DialogueLine(
+                "guest",
+                "The key is to understand both the practical value and the limitations. "
+                "Good results require clear goals, careful evaluation, and responsible use.",
+            ),
+            DialogueLine(
+                "host",
+                "That is a useful perspective. Thank you for joining us today.",
+            ),
+            DialogueLine(
+                "guest",
+                "Thank you for having me, and thank you to everyone listening.",
+            ),
+        ]
+    )
+    return lines
 
 
 @node_handler("script")
 def script_generator_node(state: PodcastState) -> dict:
     """Generate podcast script using LLM."""
-    model, tokenizer = _load_model()
-
     duration = state["duration_mins"]
     research = state["research_data"]
     topic = state["topic"]
@@ -151,23 +176,37 @@ Example format:
 
 Write the full script:"""
 
-    logger.info("Generating script (~%d lines, max %d tokens)", target_lines, max_new_tokens)
-    response = _generate_script_text(model, tokenizer, prompt, max_new_tokens)
-    script = _parse_script(response)
-
-    if not script:
-        logger.warning("Script parse failed, retrying with stricter format")
-        retry_prompt = (
-            f"{prompt}\n\nYour previous output was invalid. "
-            "Return only [Host]: and [Guest]: lines, one per line."
+    script: list[DialogueLine] = []
+    try:
+        model, tokenizer = _load_model()
+        logger.info(
+            "Generating script (~%d lines, max %d tokens)",
+            target_lines,
+            max_new_tokens,
         )
-        response = _generate_script_text(model, tokenizer, retry_prompt, max_new_tokens)
+        response = _generate_script_text(model, tokenizer, prompt, max_new_tokens)
         script = _parse_script(response)
 
-    if not script:
-        logger.warning("Using fallback script after parse failure")
-        script = _fallback_script(topic)
+        if not script:
+            logger.warning("Script parse failed, retrying with stricter format")
+            retry_prompt = (
+                f"{prompt}\n\nYour previous output was invalid. "
+                "Return only [Host]: and [Guest]: lines, one per line."
+            )
+            response = _generate_script_text(
+                model,
+                tokenizer,
+                retry_prompt,
+                max_new_tokens,
+            )
+            script = _parse_script(response)
+    except Exception:
+        logger.exception("LLM script generation failed; using fallback script")
+    finally:
+        unload_model()
 
-    logger.info("Generated %d dialogue lines", len(script))
-    clear_gpu_cache()
+    if not script:
+        script = _fallback_script(topic, research)
+
+    logger.info("Prepared %d dialogue lines", len(script))
     return {"script": script, "current_line_idx": 0}

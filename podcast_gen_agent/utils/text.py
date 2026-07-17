@@ -7,6 +7,7 @@ def clean_text_for_tts(text: str) -> str:
     text = re.sub(r"\*(.+?)\*", r"\1", text)
 
     abbrevs = {
+        "APIs": "A.P.I.s",
         "AI": "A.I.",
         "ML": "M.L.",
         "API": "A.P.I.",

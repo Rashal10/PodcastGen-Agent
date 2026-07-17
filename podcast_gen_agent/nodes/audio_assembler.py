@@ -4,6 +4,7 @@ from pathlib import Path
 from xml.sax.saxutils import escape
 
 from pydub import AudioSegment
+from pydub.effects import normalize
 
 from ..config import settings
 from ..nodes.fail import write_success_manifest
@@ -77,7 +78,7 @@ def audio_assembler_node(state: PodcastState) -> dict:
     outro = outro - settings.music_duck_db
 
     final = intro + voice_track + outro
-    final = final.normalize()
+    final = normalize(final, headroom=1.0)
 
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     slug = topic_slug(state["topic"])

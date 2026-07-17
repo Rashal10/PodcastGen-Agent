@@ -68,7 +68,6 @@ def main() -> None:
 
     duration = args.duration or settings.default_duration_mins
     topic = args.topic or "Resumed podcast run"
-    run_id = args.resume or args.run_id
 
     if args.seed is not None:
         set_seed(args.seed)
