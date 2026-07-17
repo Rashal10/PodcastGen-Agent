@@ -123,7 +123,12 @@ Environment variables (all optional):
 
 **Google Colab**: Upload `podcast_gen_colab.ipynb`, select a **GPU runtime** (T4 is fine), and run all cells in order.
 
-If you see `ImportError: cannot import name 'isin_mps_friendly'`, re-run the install cell. It pins `transformers==4.43.3`, which is compatible with Coqui XTTS.
+Colab notes:
+- Use the notebook install cell (not `requirements.txt` directly). Colab already ships torch; the notebook keeps numpy 2.x and pins `transformers==4.43.3` for XTTS.
+- Warnings about `gradio` or `langchain` version conflicts are safe to ignore.
+- If install fails, use **Runtime → Restart session** and re-run from cell 1.
+
+If you see `ImportError: cannot import name 'isin_mps_friendly'`, re-run the install cell.
 
 Generated files are written to `outputs/<run_id>/podcast_*.mp3`, not directly under `outputs/`.
 
