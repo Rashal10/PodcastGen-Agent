@@ -5,6 +5,7 @@ from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
+from .compat import ensure_langchain_compat
 from .config import settings
 from .nodes.audio_assembler import audio_assembler_node
 from .nodes.fail import fail_node
@@ -73,4 +74,5 @@ def build_graph(checkpointer: SqliteSaver | None = None) -> CompiledStateGraph:
 
 def get_graph() -> CompiledStateGraph:
     """Return a compiled graph with the default checkpointer."""
+    ensure_langchain_compat()
     return build_graph()
