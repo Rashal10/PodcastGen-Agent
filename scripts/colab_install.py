@@ -1,4 +1,4 @@
-"""Install and verify the Colab dependency set."""
+"""Install and verify notebook dependencies for Colab and Kaggle."""
 
 from __future__ import annotations
 
@@ -10,7 +10,28 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def ensure_system_packages() -> None:
+    """Install ffmpeg and espeak-ng when missing (Colab/Kaggle Linux images)."""
+    if shutil.which("ffmpeg") and shutil.which("espeak-ng"):
+        return
+
+    packages = ["ffmpeg", "espeak-ng"]
+    last_error: Exception | None = None
+    for prefix in ([], ["sudo"]):
+        try:
+            subprocess.check_call(prefix + ["apt-get", "update", "-qq"])
+            subprocess.check_call(prefix + ["apt-get", "install", "-y", "-qq", *packages])
+            return
+        except Exception as exc:  # noqa: BLE001 - try next privilege mode
+            last_error = exc
+
+    raise RuntimeError(
+        "Could not install ffmpeg/espeak-ng. Install them manually, then rerun."
+    ) from last_error
+
+
 def install_colab_dependencies() -> None:
+    ensure_system_packages()
     subprocess.run(
         [
             sys.executable,
@@ -40,6 +61,16 @@ def install_colab_dependencies() -> None:
     subprocess.check_call(
         [sys.executable, "-m", "pip", "install", "-q", "-e", str(ROOT), "--no-deps"]
     )
+
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "colab_bootstrap",
+        ROOT / "scripts" / "colab_bootstrap.py",
+    )
+    bootstrap = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(bootstrap)
+    bootstrap.ensure_colab_repo(ROOT)
 
 
 def verify_colab_imports() -> None:
@@ -72,7 +103,7 @@ def verify_colab_imports() -> None:
     print("torch", torch.__version__)
     print("transformers", transformers.__version__)
     print("tokenizers", tokenizers.__version__)
-    print("Colab dependencies and pipeline imports are ready")
+    print("Notebook dependencies and pipeline imports are ready")
 
 
 if __name__ == "__main__":
