@@ -4,7 +4,7 @@ set -euo pipefail
 
 pip install -q --upgrade pip
 
-pip uninstall -y TTS audiocraft || true
+pip uninstall -y TTS audiocraft langchain langchain-community langchain-text-splitters || true
 pip install -q -r requirements-colab.txt
 pip install -q -e . --no-deps
 
@@ -16,10 +16,12 @@ import shutil
 import torch
 import tokenizers
 import transformers
-from podcast_gen_agent.compat import ensure_transformers_compat
+from podcast_gen_agent.compat import ensure_langchain_compat, ensure_transformers_compat
 
 ensure_transformers_compat()
+ensure_langchain_compat()
 
+from langchain_core.globals import get_debug
 from TTS.api import TTS
 from transformers import MusicgenForConditionalGeneration
 from podcast_gen_agent.graph import get_graph
@@ -30,6 +32,7 @@ assert shutil.which("espeak-ng"), "espeak-ng is missing"
 from packaging import version
 assert version.parse(transformers.__version__) >= version.parse("4.57.5")
 assert version.parse(tokenizers.__version__) >= version.parse("0.22.0")
+assert get_debug() in (True, False)
 get_graph()
 print("transformers", transformers.__version__)
 print("tokenizers", tokenizers.__version__)
