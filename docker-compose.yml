@@ -1,0 +1,33 @@
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      PODCAST_OUTPUT_DIR: /app/outputs
+      PODCAST_ALLOW_CPU: "false"
+      PODCAST_LOG_LEVEL: INFO
+      COQUI_TOS_AGREED: "1"
+    volumes:
+      - ./outputs:/app/outputs
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  worker:
+    build: .
+    profiles: ["gpu"]
+    command: ["python", "-m", "podcast_gen_agent.main", "Docker smoke test", "--duration", "1"]
+    environment:
+      PODCAST_OUTPUT_DIR: /app/outputs
+      PODCAST_ALLOW_CPU: "true"
+      COQUI_TOS_AGREED: "1"
+    volumes:
+      - ./outputs:/app/outputs
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
