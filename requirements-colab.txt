@@ -3,7 +3,7 @@
 # Install with: pip install -r requirements-colab.txt
 
 transformers==4.43.3
-tokenizers>=0.19,<0.20
+tokenizers==0.19.1
 
 langgraph>=0.2.0,<0.3.0
 langgraph-checkpoint-sqlite>=2.0.0,<3.0.0
