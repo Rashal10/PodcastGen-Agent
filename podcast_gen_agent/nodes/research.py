@@ -1,43 +1,30 @@
 import logging
 
-from duckduckgo_search import DDGS
-
 from ..config import settings
-from ..state import PodcastState, SourceInfo
-from ..utils.decorators import node_handler, with_retries
+from ..state import PodcastState
+from ..utils.decorators import node_handler
+from ..utils.research_sources import gather_research
 
 logger = logging.getLogger(__name__)
 
 
-@with_retries()
-def _search_topic(topic: str, max_results: int) -> list[dict]:
-    ddgs = DDGS()
-    return list(ddgs.text(topic, max_results=max_results))
-
-
 @node_handler("research")
 def research_node(state: PodcastState) -> dict:
-    """Gather info about the topic from the web."""
+    """Gather info about the topic from configured research providers."""
     topic = state["topic"]
     logger.info("Searching for topic: %s", topic)
 
-    try:
-        results = _search_topic(topic, settings.research_max_results)
-    except Exception as exc:
-        logger.warning("Search failed after retries: %s", exc)
-        return {
-            "research_data": f"Topic: {topic}\nNo additional research available.",
-            "sources": [],
-        }
+    research_text, sources = gather_research(
+        topic,
+        max_results=settings.research_max_results,
+        providers=settings.research_providers,
+        tavily_api_key=settings.tavily_api_key,
+        brave_api_key=settings.brave_api_key,
+    )
 
-    sources: list[SourceInfo] = []
-    research_text = f"Topic: {topic}\n\nKey Information:\n"
-    for i, result in enumerate(results, 1):
-        title = result.get("title", "")
-        body = result.get("body", "")
-        url = result.get("href") or result.get("link") or ""
-        sources.append(SourceInfo(title=title, body=body, url=url))
-        research_text += f"\n{i}. {title}\n{body}\n"
+    if sources:
+        logger.info("Found %d unique source(s)", len(sources))
+    else:
+        logger.warning("No research sources returned for topic: %s", topic)
 
-    logger.info("Found %d sources", len(sources))
     return {"research_data": research_text, "sources": sources}
