@@ -47,12 +47,13 @@ def _load_tts():
         raise
 
     available = getattr(_tts, "speakers", None) or []
-    for voice in (settings.host_voice, settings.guest_voice):
-        if available and voice not in available:
-            raise ValueError(
-                f"Voice '{voice}' is not available. "
-                f"Choose from: {', '.join(available[:10])}..."
-            )
+    if not settings.host_speaker_wav and not settings.guest_speaker_wav:
+        for voice in (settings.host_voice, settings.guest_voice):
+            if available and voice not in available:
+                raise ValueError(
+                    f"Voice '{voice}' is not available. "
+                    f"Choose from: {', '.join(available[:10])}..."
+                )
 
     return _tts
 
@@ -66,14 +67,28 @@ def unload_tts() -> None:
 
 
 @with_retries()
-def _synthesize_line(tts: Any, text: str, voice: str, output_path: Path) -> None:
+def _synthesize_line(
+    tts: Any,
+    text: str,
+    voice: str,
+    output_path: Path,
+    speaker_wav: Path | None = None,
+) -> None:
     chunks = chunk_text(text, max_chars=settings.tts_chunk_max_chars)
+    tts_kwargs = {
+        "language": settings.tts_language,
+        "split_sentences": settings.tts_split_sentences,
+    }
+    if speaker_wav is not None:
+        tts_kwargs["speaker_wav"] = str(speaker_wav)
+    else:
+        tts_kwargs["speaker"] = voice
+
     if len(chunks) == 1:
         tts.tts_to_file(
             text=chunks[0],
-            speaker=voice,
-            language=settings.tts_language,
             file_path=str(output_path),
+            **tts_kwargs,
         )
         return
 
@@ -82,9 +97,8 @@ def _synthesize_line(tts: Any, text: str, voice: str, output_path: Path) -> None
         chunk_path = output_path.with_name(f"{output_path.stem}_chunk_{chunk_idx}.wav")
         tts.tts_to_file(
             text=chunk,
-            speaker=voice,
-            language=settings.tts_language,
             file_path=str(chunk_path),
+            **tts_kwargs,
         )
         chunk_paths.append(chunk_path)
 
@@ -121,12 +135,18 @@ def _synthesize_with_espeak(text: str, output_path: Path, speaker: str) -> None:
     )
 
 
-def _synthesize_segment(text: str, voice: str, speaker: str, output_path: Path) -> None:
+def _synthesize_segment(
+    text: str,
+    voice: str,
+    speaker: str,
+    output_path: Path,
+    speaker_wav: Path | None = None,
+) -> None:
     """Try XTTS, then eSpeak, then a silent placeholder so the pipeline can finish."""
     try:
         tts = _load_tts()
         require_gpu_memory(min_free_mb=128)
-        _synthesize_line(tts, text, voice, output_path)
+        _synthesize_line(tts, text, voice, output_path, speaker_wav=speaker_wav)
         return
     except Exception:
         logger.exception("XTTS failed; trying eSpeak fallback")
@@ -151,6 +171,7 @@ def voice_synthesis_node(state: PodcastState) -> dict:
 
     line = coerce_dialogue_line(script[idx])
     voice = settings.host_voice if line.speaker == "host" else settings.guest_voice
+    speaker_wav = settings.resolved_speaker_wav(line.speaker)
     cleaned_text = clean_text_for_tts(line.text)
 
     run_dir = settings.run_output_dir(state["run_id"])
@@ -164,7 +185,7 @@ def voice_synthesis_node(state: PodcastState) -> dict:
         cleaned_text[:50],
     )
 
-    _synthesize_segment(cleaned_text, voice, line.speaker, output_path)
+    _synthesize_segment(cleaned_text, voice, line.speaker, output_path, speaker_wav=speaker_wav)
 
     if not output_path.exists() or output_path.stat().st_size == 0:
         raise RuntimeError(f"TTS produced empty audio file: {output_path}")
