@@ -8,13 +8,35 @@ from langgraph.errors import GraphRecursionError
 
 from .config import settings
 from .graph import get_graph
-from .nodes.script_generator import compute_recursion_limit
 from .state import make_initial_state
 from .utils.audio import configure_pydub
 from .utils.gpu import set_seed
 from .utils.logging_config import setup_logging
+from .utils.output import list_run_summaries
+from .utils.quality import unique_notes
+from .utils.scripting import compute_recursion_limit
 
 logger = logging.getLogger(__name__)
+
+
+def _print_run_list(output_dir: Path) -> None:
+    """Print previous generation runs from manifests."""
+    runs = list_run_summaries(output_dir)
+    if not runs:
+        logger.info("No runs found under %s", output_dir)
+        print(f"No runs found under {output_dir}")
+        return
+
+    print(f"{'run_id':<28} {'status':<10} {'quality':<10} {'mins':<5} topic")
+    for run in runs:
+        run_id = str(run.get("run_id") or Path(str(run.get("_manifest_path", ""))).parent.name)
+        status = str(run.get("status") or "?")
+        quality = str(run.get("quality") or "?")
+        duration = run.get("requested_duration_mins")
+        mins = str(duration) if duration is not None else "-"
+        topic = str(run.get("topic") or "")
+        print(f"{run_id:<28} {status:<10} {quality:<10} {mins:<5} {topic}")
+    logger.info("Listed %d run(s) from %s", len(runs), output_dir)
 
 
 def main() -> None:
@@ -63,13 +85,15 @@ def main() -> None:
         default=settings.log_json,
         help="Emit structured JSON logs",
     )
+    parser.add_argument(
+        "--list-runs",
+        action="store_true",
+        help="List previous runs from output manifests and exit",
+    )
 
     args = parser.parse_args()
     setup_logging(level=args.log_level, json_logs=args.json_logs)
     configure_pydub()
-
-    if not args.topic and not args.resume:
-        parser.error("topic is required unless --resume is provided")
 
     if args.output_dir:
         settings.output_dir = Path(args.output_dir)
@@ -85,6 +109,13 @@ def main() -> None:
         settings.research_providers = settings._parse_provider_list(args.research_providers)
 
     settings.ensure_output_dir()
+
+    if args.list_runs:
+        _print_run_list(settings.output_dir)
+        return
+
+    if not args.topic and not args.resume:
+        parser.error("topic is required unless --resume or --list-runs is provided")
 
     try:
         settings.validate_runtime()
@@ -142,13 +173,29 @@ def main() -> None:
         logger.error("Pipeline finished without creating a non-empty MP3 at %s", final_path)
         sys.exit(1)
     logger.info("=" * 50)
-    logger.info("COMPLETE")
+    quality = result.get("quality") or "full"
+    notes = unique_notes(list(result.get("quality_notes") or []))
+    if quality == "degraded" or notes:
+        logger.warning("DEGRADED episode (%s)", ", ".join(notes) or quality)
+    else:
+        logger.info("COMPLETE")
     if final_path:
         logger.info("Audio: %s", final_path)
     if result.get("transcript_path"):
         logger.info("Transcript: %s", result["transcript_path"])
+    if result.get("show_notes_path"):
+        logger.info("Show notes: %s", result["show_notes_path"])
     if result.get("manifest_path"):
         logger.info("Manifest: %s", result["manifest_path"])
+    estimated = result.get("estimated_duration_secs")
+    actual = result.get("actual_duration_secs")
+    if estimated or actual:
+        logger.info(
+            "Duration: requested %s min, estimated speech %ss, actual audio %ss",
+            result.get("duration_mins") or duration,
+            estimated if estimated is not None else "?",
+            actual if actual is not None else "?",
+        )
     logger.info("Run id: %s", thread_id)
     logger.info("=" * 50)
 
