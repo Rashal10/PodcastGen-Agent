@@ -47,17 +47,30 @@ class PodcastState(TypedDict):
 
     research_data: str
     sources: Annotated[list[SourceInfo], add]
+    sources_path: str
+    facts_to_hit: list[str]
 
     script: list[DialogueLine]
     current_line_idx: int
+    estimated_duration_secs: float
+    actual_duration_secs: float
 
     audio_segments: Annotated[list[str], add]
+    tts_backends: Annotated[list[str], add]
     intro_music_path: str
     outro_music_path: str
+    music_backend: str
 
     final_audio_path: str
     transcript_path: str
+    show_notes_path: str
     manifest_path: str
+
+    quality: str
+    quality_notes: Annotated[list[str], add]
+    critic_score: float | None
+    critic_notes: str
+    critic_attempts: int
 
     node_timings: dict
     error: str | None
@@ -80,14 +93,26 @@ def make_initial_state(
         seed=seed,
         research_data="",
         sources=[],
+        sources_path="",
+        facts_to_hit=[],
         script=[],
         current_line_idx=0,
+        estimated_duration_secs=0.0,
+        actual_duration_secs=0.0,
         audio_segments=[],
+        tts_backends=[],
         intro_music_path="",
         outro_music_path="",
+        music_backend="",
         final_audio_path="",
         transcript_path="",
+        show_notes_path="",
         manifest_path="",
+        quality="full",
+        quality_notes=[],
+        critic_score=None,
+        critic_notes="",
+        critic_attempts=0,
         node_timings={},
         error=None,
     )
