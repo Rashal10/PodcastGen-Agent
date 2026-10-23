@@ -1,18 +1,20 @@
 import logging
 import re
 
-import torch
-
 from ..config import settings
-from ..state import DialogueLine, PodcastState
+from ..state import DialogueLine, PodcastState, coerce_script
 from ..utils.decorators import node_handler, with_retries
-from ..utils.gpu import clear_gpu_cache, require_gpu_memory
+from ..utils.llm import generate_chat
+from ..utils.scripting import (
+    compute_target_lines,
+    compute_target_words,
+    estimate_speech_seconds,
+    refine_script,
+    script_word_count,
+)
 from ..utils.text import clean_text_for_tts
 
 logger = logging.getLogger(__name__)
-
-_model = None
-_tokenizer = None
 
 LINE_PATTERN = re.compile(
     r"^\s*[\[\*]*(host|guest)[\]\*]*\s*:\s*(.+)$",
@@ -22,49 +24,9 @@ LINE_PATTERN = re.compile(
 
 def compute_max_new_tokens(duration_mins: int) -> int:
     """Estimate token budget from target episode duration."""
-    words = duration_mins * 150
+    words = duration_mins * settings.speech_words_per_minute
     tokens = int(words * 1.5)
     return min(max(tokens, 512), 8192)
-
-
-def compute_target_lines(duration_mins: int) -> int:
-    """Estimate dialogue line count from target episode duration."""
-    estimated = max(duration_mins * 5, 6)
-    return min(estimated, settings.max_script_lines)
-
-
-def compute_recursion_limit(duration_mins: int) -> int:
-    """LangGraph step budget for research, script, voice loop, music, and assembly."""
-    return compute_target_lines(duration_mins) + 25
-
-
-def _load_model():
-    global _model, _tokenizer
-    if _model is not None:
-        return _model, _tokenizer
-
-    logger.info("Loading LLM: %s", settings.llm_model)
-    require_gpu_memory()
-    from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
-
-    quant_config = BitsAndBytesConfig(**settings.quantization_config)
-    _tokenizer = AutoTokenizer.from_pretrained(settings.llm_model)
-    _model = AutoModelForCausalLM.from_pretrained(
-        settings.llm_model,
-        quantization_config=quant_config,
-        device_map="auto",
-        trust_remote_code=True,
-    )
-    return _model, _tokenizer
-
-
-def unload_model() -> None:
-    """Release the LLM from memory."""
-    global _model, _tokenizer
-    _model = None
-    _tokenizer = None
-    clear_gpu_cache()
-    logger.info("Unloaded LLM")
 
 
 def _parse_script(raw_text: str) -> list[DialogueLine]:
@@ -78,45 +40,7 @@ def _parse_script(raw_text: str) -> list[DialogueLine]:
         cleaned = clean_text_for_tts(text.strip().strip('"').strip("'"))
         if cleaned:
             lines.append(DialogueLine(speaker=speaker.lower(), text=cleaned))
-    return lines
-
-
-@with_retries()
-def _generate_script_text(
-    model,
-    tokenizer,
-    prompt: str,
-    max_new_tokens: int,
-) -> str:
-    messages = [
-        {
-            "role": "system",
-            "content": (
-                "You are a podcast scriptwriter. Output only dialogue lines prefixed "
-                "with [Host]: or [Guest]: on separate lines."
-            ),
-        },
-        {"role": "user", "content": prompt},
-    ]
-    text = tokenizer.apply_chat_template(
-        messages,
-        tokenize=False,
-        add_generation_prompt=True,
-    )
-    inputs = tokenizer(text, return_tensors="pt").to(settings.device)
-
-    with torch.no_grad():
-        outputs = model.generate(
-            **inputs,
-            max_new_tokens=max_new_tokens,
-            temperature=settings.llm_temperature,
-            top_p=settings.llm_top_p,
-            do_sample=True,
-            pad_token_id=tokenizer.eos_token_id,
-        )
-
-    generated_tokens = outputs[0][inputs.input_ids.shape[1] :]
-    return tokenizer.decode(generated_tokens, skip_special_tokens=True).strip()
+    return refine_script(lines)
 
 
 def _fallback_script(topic: str, research: str = "") -> list[DialogueLine]:
@@ -151,7 +75,94 @@ def _fallback_script(topic: str, research: str = "") -> list[DialogueLine]:
             ),
         ]
     )
-    return lines
+    return refine_script(lines)
+
+
+def _script_prompt(
+    topic: str,
+    duration: int,
+    research: str,
+    facts: list[str],
+    target_lines: int,
+    target_words: int,
+    critic_notes: str,
+) -> str:
+    fact_block = "\n".join(f"- {fact}" for fact in facts) or "- Use the research notes below."
+    feedback = ""
+    if critic_notes.strip():
+        feedback = (
+            "\nRewrite feedback from the editor:\n"
+            f"{critic_notes.strip()}\n"
+            "Fix every issue. Do not repeat generic filler.\n"
+        )
+    return f"""Write a podcast script for a {duration}-minute episode about: {topic}
+
+Target about {target_lines} dialogue lines and about {target_words} spoken words.
+Estimated speaking pace is {settings.speech_words_per_minute} words per minute.
+
+You MUST use these facts in the conversation (paraphrase, do not invent citations):
+{fact_block}
+
+Background research:
+{research}
+{feedback}
+Structure:
+- Cold open: host and guest jump into a concrete hook in the first two lines.
+- Do not use generic filler such as calling the topic fascinating.
+- Two or three named segments with a clear question or disagreement in each.
+- Guest should challenge or add a limitation, not only agree.
+- Close with one specific takeaway listeners can repeat.
+
+Format rules:
+- Two speakers: [Host] and [Guest]
+- Alternate speakers. Each line is 1 to 3 natural sentences.
+- About {target_lines} lines. Output only lines starting with [Host]: or [Guest]:
+
+Example format:
+[Host]: We are starting with the part of {topic} that most explainers skip.
+[Guest]: That is the right place to start, because the popular version leaves out a hard constraint.
+
+Write the full script:"""
+
+
+@with_retries()
+def _generate_script_text(prompt: str, max_new_tokens: int) -> str:
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "You are a podcast scriptwriter. Output only dialogue lines prefixed "
+                "with [Host]: or [Guest]: on separate lines. Ground every major claim "
+                "in the provided facts. Do not write filler praise."
+            ),
+        },
+        {"role": "user", "content": prompt},
+    ]
+    return generate_chat(messages, max_new_tokens)
+
+
+def _maybe_extend_script(
+    script: list[DialogueLine],
+    prompt: str,
+    duration: int,
+    target_words: int,
+    max_new_tokens: int,
+) -> list[DialogueLine]:
+    if script_word_count(script) >= int(target_words * 0.55):
+        return script
+
+    logger.info(
+        "Script is short (%d words vs %d target); requesting additional lines",
+        script_word_count(script),
+        target_words,
+    )
+    continue_prompt = (
+        f"{prompt}\n\nThe draft so far is too short for a {duration}-minute episode. "
+        "Continue from the last line with more [Host]: and [Guest]: lines. "
+        "Do not repeat earlier lines. Stay on the remaining segments and a closer."
+    )
+    extra = _parse_script(_generate_script_text(continue_prompt, max_new_tokens))
+    return refine_script(script + extra)
 
 
 @node_handler("script")
@@ -160,37 +171,32 @@ def script_generator_node(state: PodcastState) -> dict:
     duration = state["duration_mins"]
     research = state["research_data"]
     topic = state["topic"]
+    facts = list(state.get("facts_to_hit") or [])
     target_lines = compute_target_lines(duration)
+    target_words = compute_target_words(duration)
     max_new_tokens = compute_max_new_tokens(duration)
+    critic_notes = str(state.get("critic_notes") or "")
 
-    prompt = f"""Write a podcast script for a {duration}-minute episode about: {topic}
-
-Background research:
-{research}
-
-Format rules:
-- Two speakers: [Host] and [Guest]
-- Natural conversational tone
-- Start with intro, cover main points, end with summary
-- About {target_lines} dialogue exchanges
-- Each line should be 1-3 sentences
-- Output only lines starting with [Host]: or [Guest]:
-
-Example format:
-[Host]: Welcome to the show! Today we are discussing...
-[Guest]: Thanks for having me. This topic is fascinating because...
-
-Write the full script:"""
+    prompt = _script_prompt(
+        topic,
+        duration,
+        research,
+        facts,
+        target_lines,
+        target_words,
+        critic_notes,
+    )
 
     script: list[DialogueLine] = []
+    used_fallback = False
     try:
-        model, tokenizer = _load_model()
         logger.info(
-            "Generating script (~%d lines, max %d tokens)",
+            "Generating script (~%d lines, ~%d words, max %d tokens)",
             target_lines,
+            target_words,
             max_new_tokens,
         )
-        response = _generate_script_text(model, tokenizer, prompt, max_new_tokens)
+        response = _generate_script_text(prompt, max_new_tokens)
         script = _parse_script(response)
 
         if not script:
@@ -199,20 +205,43 @@ Write the full script:"""
                 f"{prompt}\n\nYour previous output was invalid. "
                 "Return only [Host]: and [Guest]: lines, one per line."
             )
-            response = _generate_script_text(
-                model,
-                tokenizer,
-                retry_prompt,
+            response = _generate_script_text(retry_prompt, max_new_tokens)
+            script = _parse_script(response)
+
+        if script:
+            script = _maybe_extend_script(
+                script,
+                prompt,
+                duration,
+                target_words,
                 max_new_tokens,
             )
-            script = _parse_script(response)
     except Exception:
         logger.exception("LLM script generation failed; using fallback script")
-    finally:
-        unload_model()
 
     if not script:
-        script = _fallback_script(topic, research)
+        previous = coerce_script(state.get("script") or [])
+        if previous:
+            logger.warning("Keeping previous script after a failed rewrite")
+            script = previous
+        else:
+            script = _fallback_script(topic, research)
+            used_fallback = True
 
-    logger.info("Prepared %d dialogue lines", len(script))
-    return {"script": script, "current_line_idx": 0}
+    estimated = estimate_speech_seconds(script)
+    logger.info(
+        "Prepared %d dialogue lines (~%.1fs spoken vs %d min requested)",
+        len(script),
+        estimated,
+        duration,
+    )
+
+    result: dict = {
+        "script": script,
+        "current_line_idx": 0,
+        "estimated_duration_secs": estimated,
+    }
+    if used_fallback:
+        result["quality_notes"] = ["script:fallback"]
+        result["quality"] = "degraded"
+    return result
