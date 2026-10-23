@@ -14,6 +14,7 @@ def test_research_node_returns_sources(mocker):
                     "url": "https://en.wikipedia.org/wiki/Quantum_computing",
                 }
             ],
+            ["Quantum computing uses qubits. (Wikipedia: Quantum computing)"],
         ),
     )
 
@@ -24,12 +25,14 @@ def test_research_node_returns_sources(mocker):
     assert "Quantum Computing" in result["research_data"]
     assert len(result["sources"]) == 1
     assert result["sources"][0]["url"].startswith("https://")
+    assert result["facts_to_hit"]
+    assert result["sources_path"].endswith("sources.md")
 
 
 def test_research_node_handles_empty_sources(mocker):
     mocker.patch(
         "podcast_gen_agent.nodes.research.gather_research",
-        return_value=("Topic: Robotics\nNo additional research available.", []),
+        return_value=("Topic: Robotics\nNo additional research available.", [], []),
     )
 
     state = make_initial_state("Robotics", 5)
@@ -37,3 +40,4 @@ def test_research_node_handles_empty_sources(mocker):
 
     assert "No additional research available" in result["research_data"]
     assert result["sources"] == []
+    assert result["quality_notes"] == ["research:empty"]
