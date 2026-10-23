@@ -21,7 +21,7 @@ def test_synthesize_segment_falls_back_to_silent_audio(tmp_path: Path):
     assert output_path.stat().st_size > 0
 
 
-def test_voice_node_never_raises_when_all_tts_backends_fail(tmp_path: Path, monkeypatch):
+def test_voice_node_fails_when_all_tts_backends_are_silent(tmp_path: Path, monkeypatch):
     from podcast_gen_agent import config
     from podcast_gen_agent.nodes import voice_synthesis as voice
 
@@ -35,6 +35,6 @@ def test_voice_node_never_raises_when_all_tts_backends_fail(tmp_path: Path, monk
     ):
         result = voice.voice_synthesis_node(state)
 
-    assert "error" not in result or not result.get("error")
+    assert result.get("error")
     assert result["audio_segments"]
     assert Path(result["audio_segments"][0]).exists()
