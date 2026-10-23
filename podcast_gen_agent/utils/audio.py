@@ -83,6 +83,12 @@ def concat_with_silence(segments: list[AudioSegment], silence_ms: int = 300) -> 
     if not segments:
         return AudioSegment.empty()
 
+    if silence_ms <= 0:
+        result = segments[0]
+        for seg in segments[1:]:
+            result += seg
+        return result
+
     silence = AudioSegment.silent(duration=silence_ms)
     result = segments[0]
 
@@ -90,6 +96,39 @@ def concat_with_silence(segments: list[AudioSegment], silence_ms: int = 300) -> 
         result += silence + seg
 
     return result
+
+
+def loop_to_length(audio: AudioSegment, length_ms: int) -> AudioSegment:
+    """Repeat an audio clip until it covers length_ms, then trim."""
+    if length_ms <= 0:
+        return AudioSegment.empty()
+    if len(audio) <= 0:
+        return AudioSegment.silent(duration=length_ms)
+    looped = AudioSegment.empty()
+    while len(looped) < length_ms:
+        looped += audio
+    return looped[:length_ms]
+
+
+def overlay_ducked_bed(
+    voice: AudioSegment,
+    bed_source: AudioSegment,
+    duck_db: int = 14,
+    fade_in_ms: int = 1000,
+    fade_out_ms: int = 1500,
+) -> AudioSegment:
+    """Loop bed music under speech and attenuate it so dialogue stays in front."""
+    if len(voice) <= 0 or len(bed_source) <= 0:
+        return voice
+
+    bed = loop_to_length(bed_source, len(voice)) - abs(duck_db)
+    fade_in = min(fade_in_ms, len(bed))
+    fade_out = min(fade_out_ms, len(bed))
+    if fade_in:
+        bed = bed.fade_in(fade_in)
+    if fade_out:
+        bed = bed.fade_out(fade_out)
+    return voice.overlay(bed)
 
 
 def normalize_segment(
