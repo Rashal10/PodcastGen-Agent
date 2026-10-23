@@ -8,7 +8,7 @@ from pydub import AudioSegment
 from ..compat import ensure_transformers_compat
 from ..config import settings
 from ..state import PodcastState, coerce_dialogue_line, coerce_script
-from ..utils.audio import normalize_segment, write_silent_wav
+from ..utils.audio import concat_with_silence, normalize_segment, write_silent_wav
 from ..utils.decorators import node_handler, with_retries
 from ..utils.gpu import clear_gpu_cache, require_gpu_memory
 from ..utils.text import chunk_text, clean_text_for_tts
@@ -106,9 +106,7 @@ def _synthesize_line(
         normalize_segment(AudioSegment.from_wav(str(path)), settings.output_sample_rate)
         for path in chunk_paths
     ]
-    combined = segments[0]
-    for seg in segments[1:]:
-        combined += seg
+    combined = concat_with_silence(segments, silence_ms=settings.tts_chunk_gap_ms)
     combined.export(str(output_path), format="wav")
 
     for path in chunk_paths:
@@ -117,7 +115,7 @@ def _synthesize_line(
 
 def _synthesize_with_espeak(text: str, output_path: Path, speaker: str) -> None:
     """Use eSpeak as a reliable CPU fallback when XTTS cannot run."""
-    voice = "en-us+f3" if speaker == "host" else "en-us+m3"
+    voice = "en-us+m3" if speaker == "host" else "en-us+f3"
     subprocess.run(
         [
             "espeak-ng",
@@ -141,23 +139,24 @@ def _synthesize_segment(
     speaker: str,
     output_path: Path,
     speaker_wav: Path | None = None,
-) -> None:
-    """Try XTTS, then eSpeak, then a silent placeholder so the pipeline can finish."""
+) -> str:
+    """Try XTTS, then eSpeak, then a silent placeholder. Return the backend used."""
     try:
         tts = _load_tts()
         require_gpu_memory(min_free_mb=128)
         _synthesize_line(tts, text, voice, output_path, speaker_wav=speaker_wav)
-        return
+        return "xtts"
     except Exception:
         logger.exception("XTTS failed; trying eSpeak fallback")
 
     try:
         _synthesize_with_espeak(text, output_path, speaker)
-        return
+        return "espeak"
     except Exception:
         logger.exception("eSpeak failed; writing silent placeholder audio")
 
     write_silent_wav(output_path, duration_ms=1500, frame_rate=settings.output_sample_rate)
+    return "silent"
 
 
 @node_handler("voice")
@@ -177,32 +176,51 @@ def voice_synthesis_node(state: PodcastState) -> dict:
     run_dir = settings.run_output_dir(state["run_id"])
     output_path = run_dir / f"segment_{idx:03d}.wav"
 
-    logger.info(
-        "Synthesizing (%d/%d) %s: %s...",
-        idx + 1,
-        len(script),
-        line.speaker,
-        cleaned_text[:50],
-    )
+    logger.info("TTS %d/%d (%s): %s...", idx + 1, len(script), line.speaker, cleaned_text[:50])
 
-    _synthesize_segment(cleaned_text, voice, line.speaker, output_path, speaker_wav=speaker_wav)
+    backend = _synthesize_segment(
+        cleaned_text,
+        voice,
+        line.speaker,
+        output_path,
+        speaker_wav=speaker_wav,
+    )
 
     if not output_path.exists() or output_path.stat().st_size == 0:
         raise RuntimeError(f"TTS produced empty audio file: {output_path}")
 
     line.audio_path = str(output_path)
     script[idx] = line
+    new_idx = idx + 1
+    backends = list(state.get("tts_backends") or []) + [backend]
 
-    return {
+    result: dict = {
         "script": script,
         "audio_segments": [str(output_path)],
-        "current_line_idx": idx + 1,
+        "current_line_idx": new_idx,
+        "tts_backends": [backend],
     }
+
+    if new_idx >= len(script):
+        if backends and all(item == "silent" for item in backends):
+            result["error"] = "All voice lines were silent placeholders. TTS failed."
+            result["quality"] = "failed"
+        elif any(item != "xtts" for item in backends):
+            notes: list[str] = []
+            if any(item == "espeak" for item in backends):
+                notes.append("tts:espeak")
+            if any(item == "silent" for item in backends):
+                notes.append("tts:partial_silence")
+            result["quality_notes"] = notes
+            result["quality"] = "degraded"
+
+    return result
 
 
 def should_continue_voice(state: PodcastState) -> str:
     """Router: check if more lines to synthesize."""
     if state.get("error"):
+        unload_tts()
         return "fail"
 
     idx = state["current_line_idx"]
