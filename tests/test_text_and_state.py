@@ -1,10 +1,9 @@
 from podcast_gen_agent.nodes.script_generator import (
     _parse_script,
     compute_max_new_tokens,
-    compute_recursion_limit,
-    compute_target_lines,
 )
 from podcast_gen_agent.state import coerce_dialogue_line, make_initial_state
+from podcast_gen_agent.utils.scripting import compute_recursion_limit, compute_target_lines
 from podcast_gen_agent.utils.slug import sanitize_topic_slug
 from podcast_gen_agent.utils.text import chunk_text, clean_text_for_tts
 
@@ -52,8 +51,8 @@ def test_compute_max_new_tokens_scales_with_duration():
 
 def test_compute_target_lines():
     assert compute_target_lines(1) == 6
-    assert compute_target_lines(2) == 10
-    assert compute_target_lines(5) == 15
+    assert compute_target_lines(2) == 12
+    assert compute_target_lines(5) == 30
 
 
 def test_compute_recursion_limit_covers_voice_loop():
