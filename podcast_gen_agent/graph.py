@@ -11,6 +11,7 @@ from .nodes.audio_assembler import audio_assembler_node
 from .nodes.fail import fail_node
 from .nodes.music_generator import music_generator_node
 from .nodes.research import research_node
+from .nodes.script_critic import script_critic_node, should_rewrite_script
 from .nodes.script_generator import script_generator_node
 from .nodes.voice_synthesis import should_continue_voice, voice_synthesis_node
 from .state import PodcastState
@@ -26,6 +27,7 @@ def build_graph(checkpointer: SqliteSaver | None = None) -> CompiledStateGraph:
 
     graph.add_node("research", research_node)
     graph.add_node("generate_script", script_generator_node)
+    graph.add_node("critic", script_critic_node)
     graph.add_node("voice", voice_synthesis_node)
     graph.add_node("music", music_generator_node)
     graph.add_node("assemble", audio_assembler_node)
@@ -40,8 +42,17 @@ def build_graph(checkpointer: SqliteSaver | None = None) -> CompiledStateGraph:
     )
     graph.add_conditional_edges(
         "generate_script",
-        lambda state: _route_on_error(state, "voice"),
-        {"fail": "fail", "voice": "voice"},
+        lambda state: _route_on_error(state, "critic"),
+        {"fail": "fail", "critic": "critic"},
+    )
+    graph.add_conditional_edges(
+        "critic",
+        should_rewrite_script,
+        {
+            "rewrite": "generate_script",
+            "voice": "voice",
+            "fail": "fail",
+        },
     )
     graph.add_conditional_edges(
         "voice",
