@@ -78,9 +78,14 @@ def music_generator_node(state: PodcastState) -> dict:
     intro_path = run_dir / "intro_music.wav"
     outro_path = run_dir / "outro_music.wav"
 
-    intro_prompt = f"upbeat podcast intro music, professional, {topic} theme"
-    outro_prompt = f"calm podcast outro music, {topic} theme, fade out, professional"
+    intro_prompt = (
+        f"instrumental podcast bumper, no vocals, short sting, professional, {topic} mood"
+    )
+    outro_prompt = (
+        f"instrumental podcast bumper, no vocals, calm fade out, professional, {topic} mood"
+    )
 
+    backend = "musicgen"
     try:
         model, processor = _load_model()
         logger.info("Generating intro and outro music")
@@ -94,10 +99,16 @@ def music_generator_node(state: PodcastState) -> dict:
     except Exception:
         logger.exception("MusicGen failed; creating fallback musical stings")
         _generate_fallback_music(intro_path, outro_path)
+        backend = "sine"
     finally:
         unload_model()
 
-    return {
+    result = {
         "intro_music_path": str(intro_path),
         "outro_music_path": str(outro_path),
+        "music_backend": backend,
     }
+    if backend == "sine":
+        result["quality_notes"] = ["music:sine"]
+        result["quality"] = "degraded"
+    return result
