@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 from ..config import settings
@@ -82,3 +83,24 @@ def diagnose_outputs(extra_dirs: list[Path | str] | None = None) -> list[dict[st
             }
         )
     return report
+
+
+def list_run_summaries(output_dir: Path | str | None = None) -> list[dict]:
+    """Load run_manifest.json files under the output directory, newest first."""
+    root = Path(output_dir).resolve() if output_dir else settings.output_dir.resolve()
+    summaries: list[dict] = []
+    if not root.exists():
+        return summaries
+
+    for manifest_path in root.glob("*/run_manifest.json"):
+        try:
+            data = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        data["_manifest_path"] = str(manifest_path)
+        summaries.append(data)
+
+    summaries.sort(key=lambda item: str(item.get("finished_at") or ""), reverse=True)
+    return summaries
