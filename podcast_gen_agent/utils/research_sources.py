@@ -9,7 +9,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
-from typing import Callable
+from collections.abc import Callable
 
 from ..state import SourceInfo
 
@@ -209,11 +209,73 @@ def _dedupe_sources(sources: list[SourceInfo]) -> list[SourceInfo]:
     return unique
 
 
-def format_research_text(topic: str, sources: list[SourceInfo]) -> str:
+def _source_rank(source: SourceInfo) -> int:
+    title = source["title"].lower()
+    if title.startswith("wikipedia:"):
+        return 0
+    if title.startswith("arxiv:"):
+        return 1
+    return 2
+
+
+def rank_sources(sources: list[SourceInfo]) -> list[SourceInfo]:
+    """Prefer encyclopedia and paper summaries ahead of generic web snippets."""
+    indexed = list(enumerate(sources))
+    indexed.sort(key=lambda item: (_source_rank(item[1]), item[0]))
+    return [source for _, source in indexed]
+
+
+def extract_facts(sources: list[SourceInfo], limit: int = 6) -> list[str]:
+    """Pull short, citeable facts the script should use."""
+    facts: list[str] = []
+    for source in sources:
+        sentence = source["body"].split(". ")[0].strip().rstrip(".")
+        if not sentence:
+            continue
+        facts.append(f"{sentence}. ({source['title']})")
+        if len(facts) >= limit:
+            break
+    return facts
+
+
+def write_sources_markdown(path, topic: str, sources: list[SourceInfo]) -> str:
+    """Write a human-readable source list next to episode artifacts."""
+    from pathlib import Path
+
+    output = Path(path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    lines = [f"# Sources: {topic}", ""]
+    if not sources:
+        lines.append("No research sources were gathered for this run.")
+    else:
+        for index, source in enumerate(sources, 1):
+            lines.append(f"## {index}. {source['title']}")
+            if source.get("url"):
+                lines.append(f"- {source['url']}")
+            lines.append("")
+            lines.append(source["body"])
+            lines.append("")
+    output.write_text("\n".join(lines).strip() + "\n", encoding="utf-8")
+    return str(output)
+
+
+def format_research_text(
+    topic: str,
+    sources: list[SourceInfo],
+    facts: list[str] | None = None,
+) -> str:
     if not sources:
         return f"Topic: {topic}\nNo additional research available."
 
-    lines = [f"Topic: {topic}", "", "Key Information:"]
+    lines = [f"Topic: {topic}", ""]
+    fact_list = facts if facts is not None else extract_facts(sources)
+    if fact_list:
+        lines.append("Facts to hit:")
+        for index, fact in enumerate(fact_list, 1):
+            lines.append(f"{index}. {fact}")
+        lines.append("")
+
+    lines.append("Key Information:")
     for index, source in enumerate(sources, 1):
         lines.append(f"\n{index}. {source['title']}")
         lines.append(source["body"])
@@ -229,17 +291,18 @@ def gather_research(
     providers: list[str],
     tavily_api_key: str = "",
     brave_api_key: str = "",
-) -> tuple[str, list[SourceInfo]]:
+) -> tuple[str, list[SourceInfo], list[str]]:
     """Run configured research providers and merge their results."""
+    per_provider = min(max_results, max(3, max_results // 2 + 1))
     provider_fns: dict[str, Callable[[], list[SourceInfo]]] = {
-        "wikipedia": lambda: search_wikipedia(topic, max_results),
-        "arxiv": lambda: search_arxiv(topic, max_results),
-        "duckduckgo": lambda: search_duckduckgo(topic, max_results),
+        "wikipedia": lambda: search_wikipedia(topic, per_provider),
+        "arxiv": lambda: search_arxiv(topic, per_provider),
+        "duckduckgo": lambda: search_duckduckgo(topic, per_provider),
     }
     if tavily_api_key:
-        provider_fns["tavily"] = lambda: search_tavily(topic, max_results, tavily_api_key)
+        provider_fns["tavily"] = lambda: search_tavily(topic, per_provider, tavily_api_key)
     if brave_api_key:
-        provider_fns["brave"] = lambda: search_brave(topic, max_results, brave_api_key)
+        provider_fns["brave"] = lambda: search_brave(topic, per_provider, brave_api_key)
 
     collected: list[SourceInfo] = []
     for provider in providers:
@@ -253,5 +316,6 @@ def gather_research(
         except Exception as exc:
             logger.warning("Research provider %s failed: %s", provider, exc)
 
-    sources = _dedupe_sources(collected)[:max_results]
-    return format_research_text(topic, sources), sources
+    sources = rank_sources(_dedupe_sources(collected))[:max_results]
+    facts = extract_facts(sources)
+    return format_research_text(topic, sources, facts), sources, facts
