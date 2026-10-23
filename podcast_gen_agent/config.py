@@ -60,7 +60,7 @@ class Settings:
             default=False,
         )
 
-        self.research_max_results = _env_int("PODCAST_RESEARCH_MAX_RESULTS", 5)
+        self.research_max_results = _env_int("PODCAST_RESEARCH_MAX_RESULTS", 10)
         self.research_providers = self._parse_provider_list(
             os.getenv(
                 "PODCAST_RESEARCH_PROVIDERS",
@@ -70,7 +70,9 @@ class Settings:
         self.tavily_api_key = os.getenv("PODCAST_TAVILY_API_KEY", "")
         self.brave_api_key = os.getenv("PODCAST_BRAVE_API_KEY", "")
         self.segment_silence_ms = _env_int("PODCAST_SEGMENT_SILENCE_MS", 300)
+        self.tts_chunk_gap_ms = _env_int("PODCAST_TTS_CHUNK_GAP_MS", 100)
         self.music_duck_db = _env_int("PODCAST_MUSIC_DUCK_DB", 6)
+        self.bed_music_duck_db = _env_int("PODCAST_BED_MUSIC_DUCK_DB", 14)
         self.mp3_bitrate = os.getenv("PODCAST_MP3_BITRATE", "192k")
 
         self.llm_temperature = _env_float("PODCAST_LLM_TEMPERATURE", 0.7)
@@ -78,7 +80,11 @@ class Settings:
         self.tts_chunk_max_chars = _env_int("PODCAST_TTS_CHUNK_MAX_CHARS", 250)
 
         self.min_gpu_free_mb = _env_int("PODCAST_MIN_GPU_FREE_MB", 256)
-        self.max_script_lines = _env_int("PODCAST_MAX_SCRIPT_LINES", 15)
+        self.max_script_lines = _env_int("PODCAST_MAX_SCRIPT_LINES", 45)
+        self.speech_words_per_minute = _env_int("PODCAST_SPEECH_WPM", 150)
+        self.words_per_line = _env_int("PODCAST_WORDS_PER_LINE", 25)
+        self.critic_max_retries = _env_int("PODCAST_CRITIC_MAX_RETRIES", 2)
+        self.critic_min_score = _env_float("PODCAST_CRITIC_MIN_SCORE", 7.0)
         self.node_retry_attempts = _env_int("PODCAST_NODE_RETRY_ATTEMPTS", 3)
 
         self.log_level = os.getenv("PODCAST_LOG_LEVEL", "INFO")
